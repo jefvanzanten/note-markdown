@@ -20,7 +20,7 @@
   const STICKY_HEIGHT = 430;
   const STICKY_STYLE_STORAGE_KEY = "note-markdown-sticky-style-v1";
   const DEFAULT_STICKY_COLOR = "#f6de76";
-  const DEFAULT_STICKY_OPACITY = 0.75;
+  const DEFAULT_STICKY_OPACITY = 1;
   const presetColors = ["#f6de76", "#f8c3a8", "#f2f0b4", "#c8f0be", "#bedff8", "#d7c7f5"];
 
   type StickyStyle = { color?: string; opacity?: number };
