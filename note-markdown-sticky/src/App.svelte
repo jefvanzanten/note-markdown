@@ -21,7 +21,6 @@
     DEFAULT_STICKY_COLOR,
     DEFAULT_STICKY_OPACITY,
     normalizeOpacity,
-    PRESET_STICKY_COLORS,
     removeStyleForTab,
     saveStyleForTab
   } from "./lib/utils/stickyStyle";
@@ -427,10 +426,8 @@
       bind:panelElement={settingsPanelElement}
       color={stickyColor}
       opacity={stickyOpacity}
-      presetColors={PRESET_STICKY_COLORS}
       onColorInput={handleColorInput}
       onOpacityInput={handleOpacityInput}
-      onPresetSelect={setStickyColor}
     />
   {/if}
 

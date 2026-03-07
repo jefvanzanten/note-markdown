@@ -60,18 +60,24 @@ export const contrastColorFor = (baseHex: string) =>
 export const deriveStickyTheme = (stickyColor: string) => {
   const stickyTextColor = contrastColorFor(stickyColor);
   const stickyIsDark = stickyTextColor === LIGHT_TEXT;
+  const stickyEditorBase = stickyIsDark
+    ? mixHexColor(stickyColor, "#000000", 0.16)
+    : mixHexColor(stickyColor, "#ffffff", 0.18);
+  const stickyToolbarBase = stickyIsDark
+    ? mixHexColor(stickyEditorBase, "#000000", 0.22)
+    : mixHexColor(stickyEditorBase, "#ffffff", 0.52);
 
   return {
     stickyLight: mixHexColor(stickyColor, "#ffffff", 0.34),
     stickyDark: mixHexColor(stickyColor, "#000000", 0.16),
     stickyBorder: toRgba(mixHexColor(stickyColor, "#000000", 0.62), 0.34),
-    stickyToolbar: toRgba(mixHexColor(stickyColor, "#ffffff", 0.55), 0.8),
+    stickyToolbar: toRgba(stickyToolbarBase, stickyIsDark ? 0.9 : 0.86),
     stickyShadow: toRgba(mixHexColor(stickyColor, "#000000", 0.82), 0.28),
     stickyGlow: toRgba(mixHexColor(stickyColor, "#ffffff", 0.2), 0.5),
     stickyTextColor,
     stickyTextMuted: stickyIsDark ? "rgba(255, 249, 232, 0.76)" : "rgba(31, 24, 10, 0.64)",
     stickyCaret: stickyTextColor,
-    stickyEditorShell: stickyIsDark ? "rgba(22, 18, 10, 0.3)" : "rgba(255, 253, 228, 0.62)",
+    stickyEditorShell: toRgba(stickyEditorBase, stickyIsDark ? 0.72 : 0.84),
     stickyActionText: stickyTextColor,
     stickyActionHover: toRgba(stickyTextColor, 0.14),
     stickyActionActive: toRgba(stickyTextColor, 0.24)
