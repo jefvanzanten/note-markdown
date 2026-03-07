@@ -747,6 +747,7 @@
 
   .editor-shell :global(.cm-content) {
     min-height: 100%;
+    padding: 14px 0 56px;
     color: var(--sticky-ink);
     caret-color: var(--sticky-caret);
   }
@@ -762,6 +763,10 @@
     color: var(--sticky-ink);
   }
 
+  .editor-shell :global(.cm-line) {
+    padding: 0 14px;
+  }
+
   .editor-shell :global(.cm-cursor),
   .editor-shell :global(.cm-dropCursor) {
     border-left-color: var(--sticky-caret) !important;
@@ -770,7 +775,7 @@
 
   .editor-shell :global(.cm-scroller) {
     background: var(--sticky-editor-bg);
-    padding: 14px 14px 56px;
+    padding: 0;
     font-size: 14px;
     line-height: 1.45;
     color: var(--sticky-ink);

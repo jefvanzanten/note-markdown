@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { EditorState } from "@codemirror/state";
+  import { EditorSelection, EditorState } from "@codemirror/state";
   import type { Range } from "@codemirror/state";
   import {
     Decoration,
@@ -120,6 +120,93 @@
     { decorations: (v) => v.decorations }
   );
 
+  const lineCenterY = (view: EditorView, pos: number) => {
+    const block = view.lineBlockAt(pos);
+    return view.documentTop + block.top + block.height / 2;
+  };
+
+  const textVerticalBounds = (view: EditorView) => {
+    const first = view.lineBlockAt(0);
+    const last = view.lineBlockAt(view.state.doc.length);
+    const top = view.documentTop + first.top;
+    const bottom = view.documentTop + last.bottom;
+    return { top, bottom };
+  };
+
+  const edgeAwarePos = (view: EditorView, x: number, y: number) => {
+    const { top, bottom } = textVerticalBounds(view);
+
+    if (y < top) {
+      return view.posAndSideAtCoords({ x, y: lineCenterY(view, 0) }, false);
+    }
+
+    if (y > bottom) {
+      return view.posAndSideAtCoords({ x, y: lineCenterY(view, view.state.doc.length) }, false);
+    }
+
+    return view.posAndSideAtCoords({ x, y }, false);
+  };
+
+  const removeRangeAround = (selection: EditorSelection, pos: number) => {
+    for (let i = 0; i < selection.ranges.length; i++) {
+      const range = selection.ranges[i];
+      if (range.from <= pos && range.to >= pos) {
+        return EditorSelection.create(
+          selection.ranges.slice(0, i).concat(selection.ranges.slice(i + 1)),
+          selection.mainIndex === i
+            ? 0
+            : selection.mainIndex - (selection.mainIndex > i ? 1 : 0)
+        );
+      }
+    }
+
+    return null;
+  };
+
+  const edgeWhitespaceSelection = EditorView.mouseSelectionStyle.of((view, event) => {
+    if (event.button !== 0 || event.detail !== 1) return null;
+
+    const { top, bottom } = textVerticalBounds(view);
+    if (event.clientY >= top && event.clientY <= bottom) return null;
+
+    let start = edgeAwarePos(view, event.clientX, event.clientY);
+    let startSelection = view.state.selection;
+
+    return {
+      update(update) {
+        if (update.docChanged) {
+          start = { ...start, pos: update.changes.mapPos(start.pos) };
+          startSelection = startSelection.map(update.changes);
+        }
+      },
+      get(curEvent, extend, multiple) {
+        const current = edgeAwarePos(view, curEvent.clientX, curEvent.clientY);
+        let range = EditorSelection.cursor(current.pos, current.assoc);
+
+        if (start.pos !== current.pos && !extend) {
+          range = EditorSelection.range(start.pos, current.pos);
+        }
+
+        if (extend) {
+          return startSelection.replaceRange(
+            startSelection.main.extend(range.from, range.to)
+          );
+        }
+
+        if (multiple && startSelection.ranges.length > 1) {
+          const removed = removeRangeAround(startSelection, current.pos);
+          if (removed) return removed;
+        }
+
+        if (multiple) {
+          return startSelection.addRange(range);
+        }
+
+        return EditorSelection.create([range]);
+      },
+    };
+  });
+
   const queueChange = (value: string, cursor: number) => {
     if (pendingChangeTimeout) {
       clearTimeout(pendingChangeTimeout);
@@ -139,6 +226,7 @@
           markdown(),
           syntaxHighlighting(mdHighlight),
           mdPlugin,
+          edgeWhitespaceSelection,
           EditorView.theme(
             {
               ".cm-cursor": {
@@ -194,8 +282,16 @@
     color: #e2e8f0;
   }
 
+  :global(.cm-content) {
+    padding: 16px 0;
+  }
+
+  :global(.cm-line) {
+    padding: 0 16px;
+  }
+
   :global(.cm-scroller) {
-    padding: 16px;
+    padding: 0;
     line-height: 1.6;
   }
 
