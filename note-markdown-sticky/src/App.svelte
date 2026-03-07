@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { LogicalSize } from "@tauri-apps/api/dpi";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import MarkdownEditor from "@note/shared-editor";
@@ -24,11 +25,14 @@
     removeStyleForTab,
     saveStyleForTab
   } from "./lib/utils/stickyStyle";
+  import { readStoredWindowSize, saveWindowSize } from "./lib/utils/stickyWindowSize";
 
   const currentWindow = getCurrentWindow();
   const requestedTabId = new URLSearchParams(window.location.search).get("tabId");
   const STICKY_WIDTH = 380;
   const STICKY_HEIGHT = 430;
+  const STICKY_MIN_WIDTH = 300;
+  const STICKY_MIN_HEIGHT = 260;
   const SETTINGS_MENU_ID = "sticky-settings-menu";
 
   let tab: TabDto | null = null;
@@ -41,6 +45,7 @@
   let settingsPanelElement: HTMLDivElement | null = null;
   let errorMessage: string | null = null;
   let theme = deriveStickyTheme(stickyColor);
+  let persistWindowSizeTimer: number | null = null;
 
   const clearError = () => {
     errorMessage = null;
@@ -56,6 +61,43 @@
 
   const toggleSettings = () => {
     showSettings = !showSettings;
+  };
+
+  const preferredWindowSize = () =>
+    readStoredWindowSize(STICKY_MIN_WIDTH, STICKY_MIN_HEIGHT) ?? {
+      width: STICKY_WIDTH,
+      height: STICKY_HEIGHT
+    };
+
+  const persistWindowSize = () => {
+    saveWindowSize(window.innerWidth, window.innerHeight, STICKY_MIN_WIDTH, STICKY_MIN_HEIGHT);
+  };
+
+  const clearPersistWindowSizeTimer = () => {
+    if (persistWindowSizeTimer === null) return;
+    window.clearTimeout(persistWindowSizeTimer);
+    persistWindowSizeTimer = null;
+  };
+
+  const schedulePersistWindowSize = () => {
+    clearPersistWindowSizeTimer();
+
+    persistWindowSizeTimer = window.setTimeout(() => {
+      persistWindowSize();
+      persistWindowSizeTimer = null;
+    }, 120);
+  };
+
+  const applyStoredWindowSize = async () => {
+    const storedSize = readStoredWindowSize(STICKY_MIN_WIDTH, STICKY_MIN_HEIGHT);
+    if (!storedSize) {
+      persistWindowSize();
+      return;
+    }
+
+    await currentWindow.setSize(new LogicalSize(storedSize.width, storedSize.height)).catch((error) => {
+      console.warn("Sticky window size restore failed", error);
+    });
   };
 
   const hydrateSessionDirectory = (nextTab: TabDto) => {
@@ -121,13 +163,15 @@
     const existing = await WebviewWindow.getByLabel(label);
     if (existing) return;
 
+    const size = preferredWindowSize();
+
     new WebviewWindow(label, {
       url: `/?tabId=${encodeURIComponent(tabId)}`,
       title: "sticky",
-      width: STICKY_WIDTH,
-      height: STICKY_HEIGHT,
-      minWidth: 300,
-      minHeight: 260,
+      width: size.width,
+      height: size.height,
+      minWidth: STICKY_MIN_WIDTH,
+      minHeight: STICKY_MIN_HEIGHT,
       decorations: false,
       transparent: true,
       alwaysOnTop: true,
@@ -224,6 +268,9 @@
   const finalizeClose = async () => {
     if (closeInProgress) return;
     closeInProgress = true;
+
+    clearPersistWindowSizeTimer();
+    persistWindowSize();
 
     const current = tab;
     if (current) {
@@ -326,6 +373,7 @@
     let unlistenCloseRequest: (() => void) | null = null;
 
     void (async () => {
+      await applyStoredWindowSize();
       await bootstrap();
       unlistenCloseRequest = await currentWindow.onCloseRequested(async (event) => {
         event.preventDefault();
@@ -334,17 +382,28 @@
     })();
 
     const handleBeforeUnload = () => {
+      if (!closeInProgress) {
+        clearPersistWindowSizeTimer();
+        persistWindowSize();
+      }
       void persistSession();
     };
 
+    const handleWindowResize = () => {
+      schedulePersistWindowSize();
+    };
+
     window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("resize", handleWindowResize);
     window.addEventListener("pointerdown", handleGlobalPointerDown);
     window.addEventListener("keydown", handleGlobalKeydown);
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("resize", handleWindowResize);
       window.removeEventListener("pointerdown", handleGlobalPointerDown);
       window.removeEventListener("keydown", handleGlobalKeydown);
+      clearPersistWindowSizeTimer();
       if (unlistenCloseRequest) {
         unlistenCloseRequest();
       }

@@ -10,11 +10,7 @@
   "scripts": {
     "check": "npm run check --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
-    "dev:note-markdown": "npm run -w note-markdown-client dev",
-    "dev:note-markdown-client": "npm run -w note-markdown-client dev",
-    "dev:note-markdown-sticky": "npm run -w note-markdown-sticky dev",
-    "tauri:note-markdown": "npm run -w note-markdown-client tauri --",
-    "tauri:note-markdown-client": "npm run -w note-markdown-client tauri --",
-    "tauri:note-markdown-sticky": "npm run -w note-markdown-sticky tauri --"
+    "note-sticky:dev": "npm run -w note-markdown-sticky tauri -- dev",
+    "note-sticky:build": "npm run -w note-markdown-sticky tauri -- build"
   }
 }
