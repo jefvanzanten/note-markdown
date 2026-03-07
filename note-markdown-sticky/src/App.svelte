@@ -270,8 +270,16 @@
     setCurrentTab(result.tab);
   };
 
-  const confirmClose = (current: TabDto) => {
-    if (!current.is_dirty && !current.is_temp) return true;
+  const confirmClose = async (current: TabDto) => {
+    if (!current.is_dirty) return true;
+
+    if (current.is_temp) {
+      if (current.content.trim().length === 0) return true;
+
+      const keepForRestore = await shouldKeepTempOnClose(current);
+      if (keepForRestore) return true;
+    }
+
     return window.confirm(
       "Deze sticky heeft niet-opgeslagen wijzigingen. Weet je zeker dat je wilt sluiten?"
     );
@@ -298,7 +306,7 @@
 
   const requestClose = async () => {
     if (closeInProgress) return;
-    if (tab && !confirmClose(tab)) return;
+    if (tab && !(await confirmClose(tab))) return;
     await finalizeClose();
   };
 
