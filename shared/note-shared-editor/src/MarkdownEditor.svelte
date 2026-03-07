@@ -77,13 +77,17 @@
       }
 
       update(u: ViewUpdate) {
-        if (u.docChanged || u.viewportChanged) {
+        if (u.docChanged || u.viewportChanged || u.selectionSet || u.focusChanged) {
           this.decorations = this.build(u.view);
         }
       }
 
       build(view: EditorView): DecorationSet {
         const decs: Range<Decoration>[] = [];
+        const activeLine = view.hasFocus
+          ? view.state.doc.lineAt(view.state.selection.main.head).number
+          : -1;
+
         for (let ln = 1; ln <= view.state.doc.lines; ln++) {
           const line = view.state.doc.line(ln);
 
@@ -92,6 +96,12 @@
             decs.push(
               Decoration.line({ class: `md-h${hm[1].length}` }).range(line.from)
             );
+
+            if (ln !== activeLine) {
+              decs.push(
+                Decoration.replace({}).range(line.from, line.from + hm[0].length)
+              );
+            }
           }
 
           const cm = line.text.match(/^(\s*[-*+] )\[([ xX])\]/);
@@ -224,7 +234,7 @@
   }
 
   :global(.md-mark) {
-    color: #475569;
+    color: currentcolor;
   }
 
   :global(.md-strong) {
