@@ -1,5 +1,7 @@
 # TODOS
 
+# Done
+
 ## Bootstrap
 
 - [x] Initialize Svelte + Vite frontend structure
@@ -41,3 +43,10 @@
 - [x] README with setup, run, and feature summary
 - [x] DESIGN_DOC with architecture/data flow/contracts
 - [x] Keep TODO status updated
+
+## Sticky UI changes
+
+- [x] Kleur instelbaar met de settings knop (gear icon)
+- [x] Kleur instellen met een color picker
+- [x] opacity ook aanpasbaar in de settings
+- [x] icons in de topbar zij niet met elke kleur te zien. geen witte bg maar echt alleen de icon met een transparante bg. pas de kleur aan om een contrast te zijn van de gekozen kleur
