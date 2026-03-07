@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = [
+    "shared/note-core",
+    "note-markdown-client/src-tauri",
+    "note-markdown-sticky/src-tauri",
+]

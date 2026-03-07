@@ -1,0 +1,20 @@
+{
+  "name": "note-markdown-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "note-markdown-client",
+    "note-markdown-sticky",
+    "shared/*"
+  ],
+  "scripts": {
+    "check": "npm run check --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "dev:note-markdown": "npm run -w note-markdown-client dev",
+    "dev:note-markdown-client": "npm run -w note-markdown-client dev",
+    "dev:note-markdown-sticky": "npm run -w note-markdown-sticky dev",
+    "tauri:note-markdown": "npm run -w note-markdown-client tauri --",
+    "tauri:note-markdown-client": "npm run -w note-markdown-client tauri --",
+    "tauri:note-markdown-sticky": "npm run -w note-markdown-sticky tauri --"
+  }
+}
