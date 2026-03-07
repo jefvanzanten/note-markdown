@@ -189,6 +189,25 @@
 
   const stickyLabelFor = (tabId: string) => `sticky-${tabId}`;
 
+  const stickyTitleText = (current: TabDto | null) => {
+    if (!current) return "sticky";
+    if (current.is_temp) return "";
+    return `${current.title}${current.is_dirty ? " *" : ""}`;
+  };
+
+  const stickySaveName = (current: TabDto) => {
+    if (current.is_temp) return "sticky";
+    return current.title;
+  };
+
+  const shouldKeepTempOnClose = async (current: TabDto) => {
+    if (!current.is_temp || current.content.trim().length === 0) return false;
+
+    const restored = await listRestoreSession().catch(() => [] as TabDto[]);
+    const tempTabs = restored.filter((candidate) => candidate.is_temp);
+    return tempTabs.length === 1 && tempTabs[0]?.tab_id === current.tab_id;
+  };
+
   const openStickyWindow = async (tabId: string) => {
     const label = stickyLabelFor(tabId);
     if (label === currentWindow.label) return;
@@ -235,12 +254,19 @@
     const current = tab;
     const result = await saveTab(current.tab_id).catch(() => null);
     if (!result) {
-      const saveAsResult = await saveTabAs(current.tab_id, sessionSaveDirectory, current.title);
+      const saveAsResult = await saveTabAs(current.tab_id, sessionSaveDirectory, stickySaveName(current));
       if (!saveAsResult) return;
       setCurrentTab(saveAsResult.tab);
       return;
     }
 
+    setCurrentTab(result.tab);
+  };
+
+  const saveStickyAs = async () => {
+    if (!tab) return;
+    const result = await saveTabAs(tab.tab_id, sessionSaveDirectory, stickySaveName(tab));
+    if (!result) return;
     setCurrentTab(result.tab);
   };
 
@@ -257,8 +283,13 @@
 
     const current = tab;
     if (current) {
-      await closeTab(current.tab_id).catch(() => null);
-      removeColorForTab(current.tab_id);
+      const keepForRestore = await shouldKeepTempOnClose(current);
+      if (keepForRestore) {
+        await updateTabContent(current.tab_id, current.content, current.cursor).catch(() => null);
+      } else {
+        await closeTab(current.tab_id).catch(() => null);
+        removeColorForTab(current.tab_id);
+      }
     }
 
     await persistSession().catch(() => null);
@@ -341,11 +372,34 @@
   const handleGlobalKeydown = (event: KeyboardEvent) => {
     if (event.key === "Escape") {
       closeSettings();
+      return;
+    }
+
+    const hasCommandModifier = event.ctrlKey || event.metaKey;
+    if (!hasCommandModifier) return;
+
+    const key = event.key.toLowerCase();
+    if (key === "n") {
+      event.preventDefault();
+      void createSticky();
+      return;
+    }
+
+    if (key === "s") {
+      event.preventDefault();
+      if (event.shiftKey) void saveStickyAs();
+      else void saveSticky();
+      return;
+    }
+
+    if (key === "w") {
+      event.preventDefault();
+      void requestClose();
     }
   };
 
   $: if (tab) {
-    void currentWindow.setTitle(`${tab.title}${tab.is_dirty ? " *" : ""}`);
+    void currentWindow.setTitle(stickyTitleText(tab));
   }
 
   onMount(() => {
@@ -400,7 +454,7 @@
 >
   <header class="toolbar">
     <div class="drag-strip" data-tauri-drag-region>
-      <span>{tab ? `${tab.title}${tab.is_dirty ? " *" : ""}` : "sticky"}</span>
+      <span>{stickyTitleText(tab)}</span>
     </div>
 
     <div class="actions">
@@ -516,6 +570,9 @@
   }
 
   .drag-strip {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
