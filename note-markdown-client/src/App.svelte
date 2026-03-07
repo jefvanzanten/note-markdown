@@ -298,6 +298,10 @@
       {/if}
     </svg>
   </button>
+
+  {#if markdownCopied}
+    <div class="copy-toast" role="status" aria-live="polite">Markdown gekopieerd</div>
+  {/if}
 </main>
 
 {#if contextMenu}
@@ -431,6 +435,40 @@
     height: 34px;
     z-index: 20;
     box-shadow: 0 8px 18px rgba(2, 6, 23, 0.45);
+  }
+
+  .copy-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    z-index: 25;
+    pointer-events: none;
+    max-width: calc(100% - 24px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    background: rgba(15, 23, 42, 0.94);
+    color: #f8fafc;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 8px 20px rgba(2, 6, 23, 0.45);
+    animation: copy-toast-in 140ms ease-out;
+  }
+
+  @keyframes copy-toast-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 6px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
   }
 
   .editor {

@@ -556,6 +556,10 @@
       {/if}
     </svg>
   </button>
+
+  {#if markdownCopied}
+    <div class="copy-toast" role="status" aria-live="polite">Markdown gekopieerd</div>
+  {/if}
 </main>
 
 <style>
@@ -692,6 +696,40 @@
 
   .copy-fab.copied {
     background: var(--sticky-action-hover);
+  }
+
+  .copy-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 10px;
+    transform: translateX(-50%);
+    z-index: 25;
+    pointer-events: none;
+    max-width: calc(100% - 24px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--sticky-action-active) 72%, #fff 28%);
+    background: color-mix(in srgb, var(--sticky-toolbar) 88%, #fff 12%);
+    color: var(--sticky-action-ink);
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 8px 18px color-mix(in srgb, var(--sticky-shadow) 60%, #000 40%);
+    animation: copy-toast-in 140ms ease-out;
+  }
+
+  @keyframes copy-toast-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 6px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
   }
 
   .copy-fab svg {
