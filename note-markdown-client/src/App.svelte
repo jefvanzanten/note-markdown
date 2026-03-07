@@ -425,8 +425,19 @@
     min-height: 0;
   }
 
+  .editor :global(.cm-content) {
+    min-height: 100%;
+    min-width: 100%;
+    box-sizing: border-box;
+    padding: 16px 0 56px;
+  }
+
   .editor :global(.cm-scroller) {
-    padding-bottom: 56px;
+    padding: 0;
+  }
+
+  .editor :global(.cm-line) {
+    padding: 0 16px;
   }
 
   .empty {
