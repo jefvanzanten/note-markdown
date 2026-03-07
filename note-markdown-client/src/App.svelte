@@ -21,6 +21,8 @@
   let contextMenu: { x: number; y: number; tabId: string } | null = null;
   let contextMenuElement: HTMLDivElement | null = null;
   let errorMessage: string | null = null;
+  let copyFeedbackTimer: number | null = null;
+  let markdownCopied = false;
 
   const clearError = () => {
     errorMessage = null;
@@ -28,6 +30,21 @@
 
   const setError = (message: string) => {
     errorMessage = message;
+  };
+
+  const clearCopyFeedbackTimer = () => {
+    if (copyFeedbackTimer === null) return;
+    window.clearTimeout(copyFeedbackTimer);
+    copyFeedbackTimer = null;
+  };
+
+  const showCopiedState = () => {
+    markdownCopied = true;
+    clearCopyFeedbackTimer();
+    copyFeedbackTimer = window.setTimeout(() => {
+      markdownCopied = false;
+      copyFeedbackTimer = null;
+    }, 1200);
   };
 
   const hydrateSessionDirectory = (tab: TabDto) => {
@@ -139,6 +156,23 @@
     closeContextMenu();
   };
 
+  const copyActiveMarkdown = async () => {
+    if (!currentActiveTab || currentActiveTab.content.length === 0) return;
+    clearError();
+
+    if (!navigator.clipboard) {
+      setError("Klembord is niet beschikbaar.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(currentActiveTab.content);
+      showCopiedState();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Kopieren naar klembord is mislukt.");
+    }
+  };
+
   const bootstrap = async () => {
     clearError();
     const restored = await listRestoreSession().catch((error) => {
@@ -161,18 +195,24 @@
     void bootstrap();
 
     const handleKeydown = (e: KeyboardEvent) => {
-      if (!e.ctrlKey) return;
-      if (e.key === "n") {
+      const hasCommandModifier = e.ctrlKey || e.metaKey;
+      if (!hasCommandModifier) return;
+
+      const key = e.key.toLowerCase();
+      if (key === "n") {
         e.preventDefault();
         void createNew();
-      } else if (e.key === "o") {
+      } else if (key === "o") {
         e.preventDefault();
         void openExisting();
-      } else if (e.key === "s") {
+      } else if (key === "s") {
         e.preventDefault();
         if (e.shiftKey) void saveActiveAs();
         else void saveActive();
-      } else if (e.key === "w") {
+      } else if (key === "c" && e.shiftKey) {
+        e.preventDefault();
+        void copyActiveMarkdown();
+      } else if (key === "w") {
         e.preventDefault();
         closeActive();
       }
@@ -194,6 +234,7 @@
       window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      clearCopyFeedbackTimer();
     };
   });
 </script>
@@ -207,15 +248,17 @@
   {/if}
 
   <section class="tabs">
-    {#each currentTabs as tab}
-      <button
-        class:active={tab.tab_id === $activeTabId}
-        on:click={() => setActive(tab.tab_id)}
-        on:contextmenu={(e) => openContextMenu(e, tab.tab_id)}
-      >
-        {tab.title}{tab.is_dirty ? " *" : ""}
-      </button>
-    {/each}
+    <div class="tabs-list">
+      {#each currentTabs as tab}
+        <button
+          class:active={tab.tab_id === $activeTabId}
+          on:click={() => setActive(tab.tab_id)}
+          on:contextmenu={(e) => openContextMenu(e, tab.tab_id)}
+        >
+          {tab.title}{tab.is_dirty ? " *" : ""}
+        </button>
+      {/each}
+    </div>
   </section>
 
   <section class="editor">
@@ -228,6 +271,24 @@
       <div class="empty">Geen tab geopend</div>
     {/if}
   </section>
+
+  <button
+    class="tab-action floating-copy"
+    class:copied={markdownCopied}
+    title={markdownCopied ? "Gekopieerd" : "Kopieer markdown"}
+    aria-label={markdownCopied ? "Markdown gekopieerd" : "Kopieer markdown"}
+    disabled={!currentActiveTab || currentActiveTab.content.length === 0}
+    on:click={() => void copyActiveMarkdown()}
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      {#if markdownCopied}
+        <path d="M5 12l5 5 9-9" />
+      {:else}
+        <rect x="9" y="9" width="10" height="10" rx="2" ry="2" />
+        <path d="M6 15V7a2 2 0 0 1 2-2h8" />
+      {/if}
+    </svg>
+  </button>
 </main>
 
 {#if contextMenu}
@@ -258,6 +319,7 @@
     height: 100vh;
     display: grid;
     grid-template-rows: auto auto 1fr;
+    position: relative;
   }
 
   .error-banner {
@@ -281,11 +343,16 @@
   }
 
   .tabs {
-    display: flex;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     padding: 8px 10px;
     background: #0b1220;
     border-bottom: 1px solid #334155;
+  }
+
+  .tabs-list {
+    display: flex;
+    gap: 8px;
     overflow-x: auto;
   }
 
@@ -302,8 +369,64 @@
     background: #0284c7;
   }
 
+  .tab-action {
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    border: 1px solid #475569;
+    background: #334155;
+    color: #f8fafc;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: background-color 120ms ease, transform 120ms ease;
+    flex-shrink: 0;
+  }
+
+  .tab-action:hover:not(:disabled) {
+    background: #475569;
+  }
+
+  .tab-action:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  .tab-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .tab-action.copied {
+    background: #0369a1;
+    border-color: #0ea5e9;
+  }
+
+  .tab-action svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .floating-copy {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    width: 34px;
+    height: 34px;
+    z-index: 20;
+    box-shadow: 0 8px 18px rgba(2, 6, 23, 0.45);
+  }
+
   .editor {
     min-height: 0;
+  }
+
+  .editor :global(.cm-scroller) {
+    padding-bottom: 56px;
   }
 
   .empty {

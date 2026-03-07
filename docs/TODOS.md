@@ -42,6 +42,7 @@
 
 - [x] README with setup, run, and feature summary
 - [x] DESIGN_DOC with architecture/data flow/contracts
+- [x] Document sticky app behavior in DESIGN_DOC/TODOS
 - [x] Keep TODO status updated
 
 ## Sticky UI changes
@@ -50,3 +51,12 @@
 - [x] Kleur instellen met een color picker
 - [x] opacity ook aanpasbaar in de settings
 - [x] icons in de topbar zij niet met elke kleur te zien. geen witte bg maar echt alleen de icon met een transparante bg. pas de kleur aan om een contrast te zijn van de gekozen kleur
+
+## Sticky gedrag
+
+- [x] Elke sticky krijgt een eigen always-on-top window
+- [x] Sessie restore opent opnieuw alle eerder geopende sticky windows
+- [x] Sluiten van een dirty sticky vraagt bevestiging (behalve lege/herstel-temp sticky)
+- [x] Sticky stijl (kleur + opacity) wordt per sticky opgeslagen in localStorage
+- [x] Sticky window grootte wordt bewaard en hersteld bij de volgende start
+- [x] Sneltoetsen: `Ctrl/Cmd+N`, `Ctrl/Cmd+S`, `Ctrl/Cmd+Shift+S`, `Ctrl/Cmd+Shift+C`, `Ctrl/Cmd+W`

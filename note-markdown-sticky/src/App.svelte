@@ -46,6 +46,8 @@
   let errorMessage: string | null = null;
   let theme = deriveStickyTheme(stickyColor);
   let persistWindowSizeTimer: number | null = null;
+  let copyFeedbackTimer: number | null = null;
+  let markdownCopied = false;
 
   const clearError = () => {
     errorMessage = null;
@@ -77,6 +79,21 @@
     if (persistWindowSizeTimer === null) return;
     window.clearTimeout(persistWindowSizeTimer);
     persistWindowSizeTimer = null;
+  };
+
+  const clearCopyFeedbackTimer = () => {
+    if (copyFeedbackTimer === null) return;
+    window.clearTimeout(copyFeedbackTimer);
+    copyFeedbackTimer = null;
+  };
+
+  const showCopiedState = () => {
+    markdownCopied = true;
+    clearCopyFeedbackTimer();
+    copyFeedbackTimer = window.setTimeout(() => {
+      markdownCopied = false;
+      copyFeedbackTimer = null;
+    }, 1200);
   };
 
   const schedulePersistWindowSize = () => {
@@ -250,6 +267,23 @@
     }
   };
 
+  const copyMarkdown = async () => {
+    if (!tab || tab.content.length === 0) return;
+    clearError();
+
+    if (!navigator.clipboard) {
+      setError("Klembord is niet beschikbaar.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(tab.content);
+      showCopiedState();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Kopieren naar klembord is mislukt.");
+    }
+  };
+
   const confirmClose = async (current: TabDto) => {
     if (!current.is_dirty) return true;
 
@@ -357,6 +391,12 @@
       return;
     }
 
+    if (key === "c" && event.shiftKey) {
+      event.preventDefault();
+      void copyMarkdown();
+      return;
+    }
+
     if (key === "w") {
       event.preventDefault();
       void requestClose();
@@ -404,6 +444,7 @@
       window.removeEventListener("pointerdown", handleGlobalPointerDown);
       window.removeEventListener("keydown", handleGlobalKeydown);
       clearPersistWindowSizeTimer();
+      clearCopyFeedbackTimer();
       if (unlistenCloseRequest) {
         unlistenCloseRequest();
       }
@@ -497,6 +538,24 @@
       <div class="empty">Sticky laden...</div>
     {/if}
   </section>
+
+  <button
+    class="copy-fab"
+    class:copied={markdownCopied}
+    title={markdownCopied ? "Gekopieerd" : "Kopieer markdown"}
+    aria-label={markdownCopied ? "Markdown gekopieerd" : "Kopieer markdown"}
+    disabled={!tab || tab.content.length === 0}
+    on:click={() => void copyMarkdown()}
+  >
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      {#if markdownCopied}
+        <path d="M5 12l5 5 9-9" />
+      {:else}
+        <rect x="9" y="9" width="10" height="10" rx="2" ry="2" />
+        <path d="M6 15V7a2 2 0 0 1 2-2h8" />
+      {/if}
+    </svg>
+  </button>
 </main>
 
 <style>
@@ -599,6 +658,52 @@
     anchor-name: --sticky-settings-anchor;
   }
 
+  .copy-fab {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--sticky-toolbar) 84%, #fff 16%);
+    color: var(--sticky-action-ink);
+    box-shadow: 0 10px 22px color-mix(in srgb, var(--sticky-shadow) 70%, #000 30%);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    z-index: 20;
+    transition: transform 120ms ease, background-color 120ms ease;
+  }
+
+  .copy-fab:hover:not(:disabled) {
+    background: var(--sticky-action-hover);
+  }
+
+  .copy-fab:active:not(:disabled) {
+    transform: translateY(1px);
+    background: var(--sticky-action-active);
+  }
+
+  .copy-fab:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .copy-fab.copied {
+    background: var(--sticky-action-hover);
+  }
+
+  .copy-fab svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
   .action.settings svg {
     transform: rotate(0deg);
     transition: transform 120ms ease;
@@ -665,7 +770,7 @@
 
   .editor-shell :global(.cm-scroller) {
     background: var(--sticky-editor-bg);
-    padding: 14px 14px 18px;
+    padding: 14px 14px 56px;
     font-size: 14px;
     line-height: 1.45;
     color: var(--sticky-ink);

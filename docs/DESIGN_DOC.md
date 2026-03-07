@@ -4,6 +4,7 @@
 
 Build a Tauri markdown note app where Rust owns behavior and Svelte is only presentation/input wiring.
 This app now lives in a monorepo and reuses shared frontend packages and a shared Rust core crate.
+Besides the tab-based client, the monorepo also ships a sticky variant where each note can run in its own always-on-top window.
 
 ## Implemented Feature Set
 
@@ -32,6 +33,17 @@ This app now lives in a monorepo and reuses shared frontend packages and a share
 - CodeMirror 6 provides markdown editing in webview.
 - UI sends commands to Rust and updates local render state from returned DTOs.
 
+### 5. Sticky window behavior (`note-markdown-sticky`)
+
+- Every sticky is a single `TabDto`; window labels follow `sticky-{tab_id}`.
+- Startup calls `list_restore_session()`: first sticky hydrates in the current window, remaining stickies open in separate windows.
+- `+` creates a new note (`new_note`) and immediately opens a new sticky window.
+- Save uses `save_tab`; for temp notes it falls back to `save_tab_as` with default filename `sticky`.
+- Close (`x` or `Ctrl/Cmd+W`) asks confirmation for dirty notes, except empty temp notes and the single recoverable temp note.
+- Markdown content can be copied to clipboard (`Ctrl/Cmd+Shift+C`) with short visual feedback.
+- Sticky style is persisted per tab in `localStorage` (`note-markdown-sticky-style-v1`) with color + opacity.
+- Sticky window size is persisted in `localStorage` (`note-markdown-sticky-window-size-v1`) and restored on next launch.
+
 ## Monorepo Reuse
 
 - Frontend shared packages:
@@ -44,6 +56,8 @@ This app now lives in a monorepo and reuses shared frontend packages and a share
 - App specific:
   - `note-markdown-client/src/App.svelte`
   - `note-markdown-client/src-tauri/src/commands/mod.rs`
+  - `note-markdown-sticky/src/App.svelte`
+  - `note-markdown-sticky/src-tauri/src/commands/mod.rs`
 
 ## Data Flow
 
