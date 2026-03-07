@@ -30,6 +30,7 @@
   const requestedTabId = new URLSearchParams(window.location.search).get("tabId");
   const STICKY_WIDTH = 380;
   const STICKY_HEIGHT = 430;
+  const SETTINGS_MENU_ID = "sticky-settings-menu";
 
   let tab: TabDto | null = null;
   let sessionSaveDirectory: string | null = null;
@@ -394,6 +395,7 @@
         bind:this={settingsButtonElement}
         class="action settings"
         title="Instellingen"
+        aria-controls={SETTINGS_MENU_ID}
         aria-expanded={showSettings}
         on:click={toggleSettings}
       >
@@ -421,6 +423,7 @@
 
   {#if showSettings}
     <SettingsMenu
+      menuId={SETTINGS_MENU_ID}
       bind:panelElement={settingsPanelElement}
       color={stickyColor}
       opacity={stickyOpacity}
@@ -537,10 +540,15 @@
   }
 
   .action.settings {
-    transform: rotate(0deg);
+    anchor-name: --sticky-settings-anchor;
   }
 
-  .action.settings:hover:not(:disabled) {
+  .action.settings svg {
+    transform: rotate(0deg);
+    transition: transform 120ms ease;
+  }
+
+  .action.settings:hover:not(:disabled) svg {
     transform: rotate(20deg);
   }
 

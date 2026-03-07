@@ -6,9 +6,10 @@
   export let onOpacityInput: (event: Event) => void;
   export let onPresetSelect: (color: string) => void;
   export let panelElement: HTMLDivElement | null = null;
+  export let menuId = "sticky-settings-menu";
 </script>
 
-<div bind:this={panelElement} class="settings-popover">
+<div id={menuId} bind:this={panelElement} class="settings-popover">
   <label for="sticky-color">Sticky kleur</label>
   <input id="sticky-color" type="color" value={color} on:input={onColorInput} />
 
@@ -40,7 +41,7 @@
 
 <style>
   .settings-popover {
-    position: absolute;
+    position: fixed;
     top: 42px;
     right: 8px;
     z-index: 10;
@@ -52,6 +53,16 @@
     box-shadow: 0 12px 20px rgba(0, 0, 0, 0.24);
     display: grid;
     gap: 8px;
+  }
+
+  @supports (position-anchor: --sticky-settings-anchor) and (top: anchor(bottom)) {
+    .settings-popover {
+      position-anchor: --sticky-settings-anchor;
+      top: calc(anchor(bottom) + 8px);
+      left: anchor(right);
+      right: auto;
+      transform: translateX(-100%);
+    }
   }
 
   .settings-popover label {
