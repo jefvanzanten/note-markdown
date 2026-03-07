@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Ack, SaveResultDto, TabDto } from "@note/shared-types";
+import { ensureMarkdownFileName, joinPath } from "@note/shared-utils";
 
 export const listRestoreSession = () => invoke<TabDto[]>("list_restore_session");
 export const newNote = () => invoke<TabDto>("new_note");
@@ -31,7 +32,7 @@ export const saveTabAs = async (
   suggestedName: string
 ) => {
   const defaultPath = defaultDirectory
-    ? `${defaultDirectory}\\${suggestedName.endsWith(".md") ? suggestedName : `${suggestedName}.md`}`
+    ? joinPath(defaultDirectory, ensureMarkdownFileName(suggestedName))
     : undefined;
 
   const path = await save({

@@ -13,18 +13,21 @@
   } from "@note/shared-api";
   import { activeTabId, tabs, upsertTab, removeTab } from "@note/shared-state";
   import type { TabDto } from "@note/shared-types";
+  import { runAction, saveWithFallback, toDirectory } from "@note/shared-utils";
 
   let currentTabs: TabDto[] = [];
   let currentActiveTab: TabDto | null = null;
   let sessionSaveDirectory: string | null = null;
   let contextMenu: { x: number; y: number; tabId: string } | null = null;
   let contextMenuElement: HTMLDivElement | null = null;
+  let errorMessage: string | null = null;
 
-  const toDirectory = (path: string | null) => {
-    if (!path) return null;
-    const normalized = path.replace(/\//g, "\\");
-    const idx = normalized.lastIndexOf("\\");
-    return idx > 0 ? normalized.slice(0, idx) : null;
+  const clearError = () => {
+    errorMessage = null;
+  };
+
+  const setError = (message: string) => {
+    errorMessage = message;
   };
 
   const hydrateSessionDirectory = (tab: TabDto) => {
@@ -46,14 +49,23 @@
   };
 
   const createNew = async () => {
+    clearError();
     const tab = await newNote();
     upsertTab(tab);
     setActive(tab.tab_id);
   };
 
   const openExisting = async () => {
-    const tab = await openFile();
+    clearError();
+    const outcome = await runAction(() => openFile());
+    if (outcome.error) {
+      setError(outcome.error);
+      return;
+    }
+
+    const tab = outcome.result;
     if (!tab) return;
+
     upsertTab(tab);
     hydrateSessionDirectory(tab);
     setActive(tab.tab_id);
@@ -61,32 +73,41 @@
 
   const saveActive = async () => {
     if (!currentActiveTab) return;
-    const result = await saveTab(currentActiveTab.tab_id).catch(() => null);
-    if (!result) {
-      const saveAsResult = await saveTabAs(
-        currentActiveTab.tab_id,
-        sessionSaveDirectory,
-        currentActiveTab.title
-      );
-      if (!saveAsResult) return;
-      upsertTab(saveAsResult.tab);
-      hydrateSessionDirectory(saveAsResult.tab);
+    clearError();
+
+    const outcome = await saveWithFallback({
+      save: () => saveTab(currentActiveTab.tab_id),
+      saveAs: () => saveTabAs(currentActiveTab.tab_id, sessionSaveDirectory, currentActiveTab.title)
+    });
+
+    if (outcome.error) {
+      setError(outcome.error);
       return;
     }
-    upsertTab(result.tab);
-    hydrateSessionDirectory(result.tab);
+
+    if (!outcome.result) return;
+
+    upsertTab(outcome.result.tab);
+    hydrateSessionDirectory(outcome.result.tab);
   };
 
   const saveActiveAs = async () => {
     if (!currentActiveTab) return;
-    const result = await saveTabAs(
-      currentActiveTab.tab_id,
-      sessionSaveDirectory,
-      currentActiveTab.title
+    clearError();
+
+    const outcome = await runAction(() =>
+      saveTabAs(currentActiveTab.tab_id, sessionSaveDirectory, currentActiveTab.title)
     );
-    if (!result) return;
-    upsertTab(result.tab);
-    hydrateSessionDirectory(result.tab);
+
+    if (outcome.error) {
+      setError(outcome.error);
+      return;
+    }
+
+    if (!outcome.result) return;
+
+    upsertTab(outcome.result.tab);
+    hydrateSessionDirectory(outcome.result.tab);
   };
 
   const closeTabById = async (tabId: string) => {
@@ -119,7 +140,12 @@
   };
 
   const bootstrap = async () => {
-    const restored = await listRestoreSession();
+    clearError();
+    const restored = await listRestoreSession().catch((error) => {
+      setError(error instanceof Error ? error.message : "Sessie herstellen is mislukt.");
+      return [] as TabDto[];
+    });
+
     if (restored.length > 0) {
       for (const tab of restored) {
         upsertTab(tab);
@@ -173,6 +199,13 @@
 </script>
 
 <main class="app-shell">
+  {#if errorMessage}
+    <div class="error-banner" role="alert">
+      <span>{errorMessage}</span>
+      <button on:click={clearError} aria-label="Melding sluiten">Sluiten</button>
+    </div>
+  {/if}
+
   <section class="tabs">
     {#each currentTabs as tab}
       <button
@@ -224,7 +257,27 @@
   .app-shell {
     height: 100vh;
     display: grid;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto auto 1fr;
+  }
+
+  .error-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #7f1d1d;
+    color: #fee2e2;
+    border-bottom: 1px solid #b91c1c;
+  }
+
+  .error-banner button {
+    border: 1px solid rgba(254, 226, 226, 0.35);
+    background: rgba(0, 0, 0, 0.18);
+    color: inherit;
+    border-radius: 999px;
+    padding: 4px 10px;
+    cursor: pointer;
   }
 
   .tabs {

@@ -1,5 +1,5 @@
 {
-  "name": "@note/shared-api",
+  "name": "@note/shared-utils",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,11 +9,5 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     }
-  },
-  "dependencies": {
-    "@note/shared-types": "*",
-    "@note/shared-utils": "*",
-    "@tauri-apps/api": "^2.1.0",
-    "@tauri-apps/plugin-dialog": "^2.0.1"
   }
 }

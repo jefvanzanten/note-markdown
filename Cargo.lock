@@ -1819,6 +1819,7 @@ name = "note-markdown"
 version = "0.1.0"
 dependencies = [
  "note-core",
+ "note-tauri-commands",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -1829,8 +1830,18 @@ name = "note-markdown-sticky"
 version = "0.1.0"
 dependencies = [
  "note-core",
+ "note-tauri-commands",
  "tauri",
  "tauri-build",
+ "tauri-plugin-dialog",
+]
+
+[[package]]
+name = "note-tauri-commands"
+version = "0.1.0"
+dependencies = [
+ "note-core",
+ "tauri",
  "tauri-plugin-dialog",
 ]
 

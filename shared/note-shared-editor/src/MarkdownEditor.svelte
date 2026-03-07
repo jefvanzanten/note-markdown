@@ -19,6 +19,7 @@
 
   let host: HTMLDivElement;
   let editorView: EditorView | null = null;
+  let pendingChangeTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const mdHighlight = HighlightStyle.define([
     { tag: tags.heading, class: "md-mark" },
@@ -31,11 +32,13 @@
   ]);
 
   class CheckboxWidget extends WidgetType {
-    constructor(
-      readonly checked: boolean,
-      readonly from: number
-    ) {
+    checked: boolean;
+    from: number;
+
+    constructor(checked: boolean, from: number) {
       super();
+      this.checked = checked;
+      this.from = from;
     }
 
     toDOM(view: EditorView): HTMLElement {
@@ -107,6 +110,17 @@
     { decorations: (v) => v.decorations }
   );
 
+  const queueChange = (value: string, cursor: number) => {
+    if (pendingChangeTimeout) {
+      clearTimeout(pendingChangeTimeout);
+    }
+
+    pendingChangeTimeout = setTimeout(() => {
+      pendingChangeTimeout = null;
+      onChange(value, cursor);
+    }, 300);
+  };
+
   const createEditor = () => {
     editorView = new EditorView({
       state: EditorState.create({
@@ -128,7 +142,7 @@
           EditorView.lineWrapping,
           EditorView.updateListener.of((update) => {
             if (!update.docChanged && !update.selectionSet) return;
-            onChange(update.state.doc.toString(), update.state.selection.main.head);
+            queueChange(update.state.doc.toString(), update.state.selection.main.head);
           }),
         ],
       }),
@@ -149,6 +163,9 @@
   }
 
   onDestroy(() => {
+    if (pendingChangeTimeout) {
+      clearTimeout(pendingChangeTimeout);
+    }
     editorView?.destroy();
   });
 </script>

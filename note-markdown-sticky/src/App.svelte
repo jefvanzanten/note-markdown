@@ -13,18 +13,23 @@
     updateTabContent
   } from "@note/shared-api";
   import type { TabDto } from "@note/shared-types";
+  import { runAction, saveWithFallback, toDirectory } from "@note/shared-utils";
+  import SettingsMenu from "./lib/components/SettingsMenu/SettingsMenu.svelte";
+  import { deriveStickyTheme, normalizeHexColor } from "./lib/utils/colorSystem";
+  import {
+    applyStoredStyle,
+    DEFAULT_STICKY_COLOR,
+    DEFAULT_STICKY_OPACITY,
+    normalizeOpacity,
+    PRESET_STICKY_COLORS,
+    removeStyleForTab,
+    saveStyleForTab
+  } from "./lib/utils/stickyStyle";
 
   const currentWindow = getCurrentWindow();
   const requestedTabId = new URLSearchParams(window.location.search).get("tabId");
   const STICKY_WIDTH = 380;
   const STICKY_HEIGHT = 430;
-  const STICKY_STYLE_STORAGE_KEY = "note-markdown-sticky-style-v1";
-  const DEFAULT_STICKY_COLOR = "#f6de76";
-  const DEFAULT_STICKY_OPACITY = 1;
-  const presetColors = ["#f6de76", "#f8c3a8", "#f2f0b4", "#c8f0be", "#bedff8", "#d7c7f5"];
-
-  type StickyStyle = { color?: string; opacity?: number };
-  type StickyStyleMap = Record<string, StickyStyle>;
 
   let tab: TabDto | null = null;
   let sessionSaveDirectory: string | null = null;
@@ -34,152 +39,23 @@
   let stickyOpacity = DEFAULT_STICKY_OPACITY;
   let settingsButtonElement: HTMLButtonElement | null = null;
   let settingsPanelElement: HTMLDivElement | null = null;
+  let errorMessage: string | null = null;
+  let theme = deriveStickyTheme(stickyColor);
 
-  const isValidHexColor = (value: string) => /^#[0-9a-fA-F]{6}$/.test(value);
-
-  const normalizeHexColor = (value: string | null | undefined) => {
-    if (!value) return null;
-    return isValidHexColor(value) ? value.toLowerCase() : null;
+  const clearError = () => {
+    errorMessage = null;
   };
 
-  const normalizeOpacity = (value: unknown) => {
-    if (typeof value !== "number" || Number.isNaN(value)) return null;
-    return Math.max(0.3, Math.min(1, value));
-  };
-
-  const readStickyStyles = (): StickyStyleMap => {
-    try {
-      const raw = localStorage.getItem(STICKY_STYLE_STORAGE_KEY);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw) as StickyStyleMap;
-      return parsed && typeof parsed === "object" ? parsed : {};
-    } catch {
-      return {};
-    }
-  };
-
-  const writeStickyStyles = (next: StickyStyleMap) => {
-    try {
-      localStorage.setItem(STICKY_STYLE_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore storage write failures
-    }
-  };
-
-  const applyStoredStyle = (tabId: string) => {
-    const styles = readStickyStyles();
-    const style = styles[tabId];
-    const storedColor = normalizeHexColor(style?.color);
-    const storedOpacity = normalizeOpacity(style?.opacity);
-    stickyColor = storedColor ?? DEFAULT_STICKY_COLOR;
-    stickyOpacity = storedOpacity ?? DEFAULT_STICKY_OPACITY;
-  };
-
-  const saveStyleForTab = (tabId: string, color: string, opacity: number) => {
-    const styles = readStickyStyles();
-    styles[tabId] = { color, opacity };
-    writeStickyStyles(styles);
-  };
-
-  const removeColorForTab = (tabId: string) => {
-    const styles = readStickyStyles();
-    if (!(tabId in styles)) return;
-    delete styles[tabId];
-    writeStickyStyles(styles);
-  };
-
-  const parseHexColor = (hex: string) => {
-    const normalized = normalizeHexColor(hex) ?? DEFAULT_STICKY_COLOR;
-    const value = normalized.slice(1);
-    return {
-      r: parseInt(value.slice(0, 2), 16),
-      g: parseInt(value.slice(2, 4), 16),
-      b: parseInt(value.slice(4, 6), 16)
-    };
-  };
-
-  const toHexColor = (r: number, g: number, b: number) => {
-    const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
-    return `#${[clamp(r), clamp(g), clamp(b)].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
-  };
-
-  const mixHexColor = (hexA: string, hexB: string, ratio: number) => {
-    const a = parseHexColor(hexA);
-    const b = parseHexColor(hexB);
-    const m = Math.max(0, Math.min(1, ratio));
-    return toHexColor(a.r + (b.r - a.r) * m, a.g + (b.g - a.g) * m, a.b + (b.b - a.b) * m);
-  };
-
-  const toRgba = (hex: string, alpha: number) => {
-    const { r, g, b } = parseHexColor(hex);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  };
-
-  const colorLuminance = (hex: string) => {
-    const { r, g, b } = parseHexColor(hex);
-    const toLinear = (value: number) => {
-      const c = value / 255;
-      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-    };
-
-    return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
-  };
-
-  const contrastRatio = (hexA: string, hexB: string) => {
-    const a = colorLuminance(hexA);
-    const b = colorLuminance(hexB);
-    const brightest = Math.max(a, b);
-    const darkest = Math.min(a, b);
-    return (brightest + 0.05) / (darkest + 0.05);
-  };
-
-  const contrastColorFor = (baseHex: string) => {
-    const dark = "#1f180a";
-    const light = "#fff9e8";
-    return contrastRatio(baseHex, dark) >= contrastRatio(baseHex, light) ? dark : light;
-  };
-
-  const setStickyColor = (nextColor: string) => {
-    const normalized = normalizeHexColor(nextColor) ?? DEFAULT_STICKY_COLOR;
-    stickyColor = normalized;
-    if (tab) {
-      saveStyleForTab(tab.tab_id, normalized, stickyOpacity);
-    }
-  };
-
-  const setStickyOpacity = (nextOpacity: number) => {
-    const normalized = normalizeOpacity(nextOpacity) ?? DEFAULT_STICKY_OPACITY;
-    stickyOpacity = normalized;
-    if (tab) {
-      saveStyleForTab(tab.tab_id, stickyColor, normalized);
-    }
-  };
-
-  const handleColorInput = (event: Event) => {
-    const target = event.currentTarget as HTMLInputElement | null;
-    if (!target) return;
-    setStickyColor(target.value);
-  };
-
-  const handleOpacityInput = (event: Event) => {
-    const target = event.currentTarget as HTMLInputElement | null;
-    if (!target) return;
-    setStickyOpacity(Number.parseFloat(target.value));
-  };
-
-  const toggleSettings = () => {
-    showSettings = !showSettings;
+  const setError = (message: string) => {
+    errorMessage = message;
   };
 
   const closeSettings = () => {
     showSettings = false;
   };
 
-  const toDirectory = (path: string | null) => {
-    if (!path) return null;
-    const normalized = path.replace(/\//g, "\\");
-    const idx = normalized.lastIndexOf("\\");
-    return idx > 0 ? normalized.slice(0, idx) : null;
+  const toggleSettings = () => {
+    showSettings = !showSettings;
   };
 
   const hydrateSessionDirectory = (nextTab: TabDto) => {
@@ -195,9 +71,39 @@
     return `${current.title}${current.is_dirty ? " *" : ""}`;
   };
 
-  const stickySaveName = (current: TabDto) => {
-    if (current.is_temp) return "sticky";
-    return current.title;
+  const stickySaveName = (current: TabDto) => (current.is_temp ? "sticky" : current.title);
+
+  const applyStyleState = (tabId: string) => {
+    const style = applyStoredStyle(tabId);
+    stickyColor = style.color;
+    stickyOpacity = style.opacity;
+  };
+
+  const persistStyleState = () => {
+    if (!tab) return;
+    saveStyleForTab(tab.tab_id, stickyColor, stickyOpacity);
+  };
+
+  const setStickyColor = (nextColor: string) => {
+    stickyColor = normalizeHexColor(nextColor) ?? DEFAULT_STICKY_COLOR;
+    persistStyleState();
+  };
+
+  const setStickyOpacity = (nextOpacity: number) => {
+    stickyOpacity = normalizeOpacity(nextOpacity) ?? DEFAULT_STICKY_OPACITY;
+    persistStyleState();
+  };
+
+  const handleColorInput = (event: Event) => {
+    const target = event.currentTarget as HTMLInputElement | null;
+    if (!target) return;
+    setStickyColor(target.value);
+  };
+
+  const handleOpacityInput = (event: Event) => {
+    const target = event.currentTarget as HTMLInputElement | null;
+    if (!target) return;
+    setStickyOpacity(Number.parseFloat(target.value));
   };
 
   const shouldKeepTempOnClose = async (current: TabDto) => {
@@ -232,42 +138,72 @@
   const setCurrentTab = (nextTab: TabDto) => {
     tab = nextTab;
     hydrateSessionDirectory(nextTab);
-    applyStoredStyle(nextTab.tab_id);
+    applyStyleState(nextTab.tab_id);
   };
 
   const syncTabContent = async (content: string, cursor: number) => {
     if (!tab) return;
     if (tab.content === content && tab.cursor === cursor) return;
 
+    clearError();
     const current = tab;
     tab = { ...current, content, cursor, is_dirty: true };
-    await updateTabContent(current.tab_id, content, cursor);
+
+    try {
+      await updateTabContent(current.tab_id, content, cursor);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Bijwerken van de sticky is mislukt.");
+    }
   };
 
   const createSticky = async () => {
-    const created = await newNote();
-    await openStickyWindow(created.tab_id);
+    clearError();
+    const outcome = await runAction(() => newNote());
+    if (outcome.error) {
+      setError(outcome.error);
+      return;
+    }
+
+    if (!outcome.result) return;
+    await openStickyWindow(outcome.result.tab_id);
   };
 
   const saveSticky = async () => {
     if (!tab) return;
+    clearError();
+
     const current = tab;
-    const result = await saveTab(current.tab_id).catch(() => null);
-    if (!result) {
-      const saveAsResult = await saveTabAs(current.tab_id, sessionSaveDirectory, stickySaveName(current));
-      if (!saveAsResult) return;
-      setCurrentTab(saveAsResult.tab);
+    const outcome = await saveWithFallback({
+      save: () => saveTab(current.tab_id),
+      saveAs: () => saveTabAs(current.tab_id, sessionSaveDirectory, stickySaveName(current))
+    });
+
+    if (outcome.error) {
+      setError(outcome.error);
       return;
     }
 
-    setCurrentTab(result.tab);
+    if (outcome.result) {
+      setCurrentTab(outcome.result.tab);
+    }
   };
 
   const saveStickyAs = async () => {
     if (!tab) return;
-    const result = await saveTabAs(tab.tab_id, sessionSaveDirectory, stickySaveName(tab));
-    if (!result) return;
-    setCurrentTab(result.tab);
+    clearError();
+
+    const current = tab;
+    const outcome = await runAction(() =>
+      saveTabAs(current.tab_id, sessionSaveDirectory, stickySaveName(current))
+    );
+    if (outcome.error) {
+      setError(outcome.error);
+      return;
+    }
+
+    if (outcome.result) {
+      setCurrentTab(outcome.result.tab);
+    }
   };
 
   const confirmClose = async (current: TabDto) => {
@@ -296,7 +232,7 @@
         await updateTabContent(current.tab_id, current.content, current.cursor).catch(() => null);
       } else {
         await closeTab(current.tab_id).catch(() => null);
-        removeColorForTab(current.tab_id);
+        removeStyleForTab(current.tab_id);
       }
     }
 
@@ -311,7 +247,11 @@
   };
 
   const bootstrap = async () => {
-    const restored = await listRestoreSession();
+    clearError();
+    const restored = await listRestoreSession().catch((error) => {
+      setError(error instanceof Error ? error.message : "Sticky sessie laden is mislukt.");
+      return [] as TabDto[];
+    });
 
     if (requestedTabId) {
       const requested = restored.find((candidate) => candidate.tab_id === requestedTabId);
@@ -336,36 +276,6 @@
       await openStickyWindow(restoredTab.tab_id);
     }
   };
-
-  let stickyLight = mixHexColor(stickyColor, "#ffffff", 0.34);
-  let stickyDark = mixHexColor(stickyColor, "#000000", 0.16);
-  let stickyBorder = toRgba(mixHexColor(stickyColor, "#000000", 0.62), 0.34);
-  let stickyToolbar = toRgba(mixHexColor(stickyColor, "#ffffff", 0.55), 0.8);
-  let stickyShadow = toRgba(mixHexColor(stickyColor, "#000000", 0.82), 0.28);
-  let stickyGlow = toRgba(mixHexColor(stickyColor, "#ffffff", 0.2), 0.5);
-  let stickyTextColor = contrastColorFor(stickyColor);
-  let stickyIsDark = stickyTextColor === "#fff9e8";
-  let stickyTextMuted = stickyIsDark ? "rgba(255, 249, 232, 0.76)" : "rgba(31, 24, 10, 0.64)";
-  let stickyCaret = stickyTextColor;
-  let stickyEditorShell = stickyIsDark ? "rgba(22, 18, 10, 0.3)" : "rgba(255, 253, 228, 0.62)";
-  let stickyActionText = stickyTextColor;
-  let stickyActionHover = toRgba(stickyActionText, 0.14);
-  let stickyActionActive = toRgba(stickyActionText, 0.24);
-
-  $: stickyLight = mixHexColor(stickyColor, "#ffffff", 0.34);
-  $: stickyDark = mixHexColor(stickyColor, "#000000", 0.16);
-  $: stickyBorder = toRgba(mixHexColor(stickyColor, "#000000", 0.62), 0.34);
-  $: stickyToolbar = toRgba(mixHexColor(stickyColor, "#ffffff", 0.55), 0.8);
-  $: stickyShadow = toRgba(mixHexColor(stickyColor, "#000000", 0.82), 0.28);
-  $: stickyGlow = toRgba(mixHexColor(stickyColor, "#ffffff", 0.2), 0.5);
-  $: stickyTextColor = contrastColorFor(stickyColor);
-  $: stickyIsDark = stickyTextColor === "#fff9e8";
-  $: stickyTextMuted = stickyIsDark ? "rgba(255, 249, 232, 0.76)" : "rgba(31, 24, 10, 0.64)";
-  $: stickyCaret = stickyTextColor;
-  $: stickyEditorShell = stickyIsDark ? "rgba(22, 18, 10, 0.3)" : "rgba(255, 253, 228, 0.62)";
-  $: stickyActionText = stickyTextColor;
-  $: stickyActionHover = toRgba(stickyActionText, 0.14);
-  $: stickyActionActive = toRgba(stickyActionText, 0.24);
 
   const handleGlobalPointerDown = (event: PointerEvent) => {
     if (!showSettings || event.button !== 0) return;
@@ -406,6 +316,8 @@
     }
   };
 
+  $: theme = deriveStickyTheme(stickyColor);
+
   $: if (tab) {
     void currentWindow.setTitle(stickyTitleText(tab));
   }
@@ -444,19 +356,19 @@
   class="sticky-window"
   style="
     --sticky-base: {stickyColor};
-    --sticky-light: {stickyLight};
-    --sticky-dark: {stickyDark};
-    --sticky-border: {stickyBorder};
-    --sticky-toolbar: {stickyToolbar};
-    --sticky-shadow: {stickyShadow};
-    --sticky-glow: {stickyGlow};
-    --sticky-ink: {stickyTextColor};
-    --sticky-muted: {stickyTextMuted};
-    --sticky-caret: {stickyCaret};
-    --sticky-editor-bg: {stickyEditorShell};
-    --sticky-action-ink: {stickyActionText};
-    --sticky-action-hover: {stickyActionHover};
-    --sticky-action-active: {stickyActionActive};
+    --sticky-light: {theme.stickyLight};
+    --sticky-dark: {theme.stickyDark};
+    --sticky-border: {theme.stickyBorder};
+    --sticky-toolbar: {theme.stickyToolbar};
+    --sticky-shadow: {theme.stickyShadow};
+    --sticky-glow: {theme.stickyGlow};
+    --sticky-ink: {theme.stickyTextColor};
+    --sticky-muted: {theme.stickyTextMuted};
+    --sticky-caret: {theme.stickyCaret};
+    --sticky-editor-bg: {theme.stickyEditorShell};
+    --sticky-action-ink: {theme.stickyActionText};
+    --sticky-action-hover: {theme.stickyActionHover};
+    --sticky-action-active: {theme.stickyActionActive};
     --sticky-opacity: {stickyOpacity};
   "
 >
@@ -500,36 +412,23 @@
     </div>
   </header>
 
-  {#if showSettings}
-    <div bind:this={settingsPanelElement} class="settings-popover">
-      <label for="sticky-color">Sticky kleur</label>
-      <input id="sticky-color" type="color" value={stickyColor} on:input={handleColorInput} />
-
-      <div class="opacity-group">
-        <label for="sticky-opacity">Opacity ({Math.round(stickyOpacity * 100)}%)</label>
-        <input
-          id="sticky-opacity"
-          type="range"
-          min="0.3"
-          max="1"
-          step="0.05"
-          value={stickyOpacity}
-          on:input={handleOpacityInput}
-        />
-      </div>
-
-      <div class="swatches">
-        {#each presetColors as color}
-          <button
-            class:active={stickyColor === color}
-            class="swatch"
-            style="background: {color}"
-            title={color}
-            on:click={() => setStickyColor(color)}
-          ></button>
-        {/each}
-      </div>
+  {#if errorMessage}
+    <div class="error-banner" role="alert">
+      <span>{errorMessage}</span>
+      <button class="dismiss" aria-label="Melding sluiten" on:click={clearError}>Sluiten</button>
     </div>
+  {/if}
+
+  {#if showSettings}
+    <SettingsMenu
+      bind:panelElement={settingsPanelElement}
+      color={stickyColor}
+      opacity={stickyOpacity}
+      presetColors={PRESET_STICKY_COLORS}
+      onColorInput={handleColorInput}
+      onOpacityInput={handleOpacityInput}
+      onPresetSelect={setStickyColor}
+    />
   {/if}
 
   <section class="editor-shell">
@@ -553,7 +452,7 @@
   .sticky-window {
     height: 100vh;
     display: grid;
-    grid-template-rows: 36px 1fr;
+    grid-template-rows: 36px auto 1fr;
     opacity: var(--sticky-opacity);
     border: 1px solid var(--sticky-border);
     border-radius: 14px;
@@ -636,10 +535,6 @@
     stroke-linejoin: round;
   }
 
-  .action.close {
-    color: var(--sticky-action-ink);
-  }
-
   .action.settings {
     transform: rotate(0deg);
   }
@@ -648,64 +543,24 @@
     transform: rotate(20deg);
   }
 
-  .settings-popover {
-    position: absolute;
-    top: 42px;
-    right: 8px;
-    z-index: 10;
-    min-width: 190px;
-    padding: 10px;
-    border-radius: 10px;
-    border: 1px solid var(--sticky-action-active);
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 12px 20px rgba(0, 0, 0, 0.24);
-    display: grid;
-    gap: 8px;
-  }
-
-  .settings-popover label {
+  .error-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(127, 29, 29, 0.86);
+    color: #fff4f4;
     font-size: 12px;
-    font-weight: 600;
-    color: #372a12;
   }
 
-  .settings-popover input[type="color"] {
-    width: 100%;
-    height: 34px;
-    border: 1px solid rgba(82, 66, 27, 0.35);
-    border-radius: 8px;
-    background: transparent;
+  .dismiss {
+    border: 1px solid rgba(255, 244, 244, 0.3);
+    background: rgba(0, 0, 0, 0.14);
+    color: inherit;
+    border-radius: 999px;
+    padding: 3px 9px;
     cursor: pointer;
-    padding: 2px;
-  }
-
-  .opacity-group {
-    display: grid;
-    gap: 6px;
-  }
-
-  .opacity-group input[type="range"] {
-    width: 100%;
-    accent-color: #3b2f13;
-    cursor: pointer;
-  }
-
-  .swatches {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 6px;
-  }
-
-  .swatch {
-    height: 22px;
-    border-radius: 7px;
-    border: 1px solid rgba(44, 34, 12, 0.25);
-    cursor: pointer;
-  }
-
-  .swatch.active {
-    outline: 2px solid #1f2937;
-    outline-offset: 1px;
   }
 
   .editor-shell {
