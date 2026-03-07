@@ -14,6 +14,7 @@
   import { activeTabId, tabs, upsertTab, removeTab } from "@note/shared-state";
   import type { TabDto } from "@note/shared-types";
   import { runAction, saveWithFallback, toDirectory } from "@note/shared-utils";
+  import HamburgerMenu from "./lib/components/HamburgerMenu.svelte";
 
   let currentTabs: TabDto[] = [];
   let currentActiveTab: TabDto | null = null;
@@ -248,6 +249,14 @@
   {/if}
 
   <section class="tabs">
+    <HamburgerMenu
+      canSave={!!currentActiveTab}
+      onOpenMarkdown={() => void openExisting()}
+      onNewTab={() => void createNew()}
+      onSave={() => void saveActive()}
+      onSaveAs={() => void saveActiveAs()}
+    />
+
     <div class="tabs-list">
       {#each currentTabs as tab}
         <button
@@ -344,7 +353,9 @@
 
   .tabs {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
     padding: 8px 10px;
     background: #0b1220;
     border-bottom: 1px solid #334155;
@@ -354,6 +365,7 @@
     display: flex;
     gap: 8px;
     overflow-x: auto;
+    min-width: 0;
   }
 
   .tabs button {
