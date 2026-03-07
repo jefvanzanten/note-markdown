@@ -452,7 +452,7 @@
   .sticky-window {
     height: 100vh;
     display: grid;
-    grid-template-rows: 36px auto 1fr;
+    grid-template-rows: 36px auto minmax(0, 1fr);
     opacity: var(--sticky-opacity);
     border: 1px solid var(--sticky-border);
     border-radius: 14px;
@@ -467,6 +467,7 @@
   }
 
   .toolbar {
+    grid-row: 1;
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: center;
@@ -544,6 +545,7 @@
   }
 
   .error-banner {
+    grid-row: 2;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -564,18 +566,31 @@
   }
 
   .editor-shell {
+    grid-row: 3;
     min-height: 0;
     background: var(--sticky-editor-bg);
   }
 
   .editor-shell :global(.cm-editor) {
     height: 100%;
-    background: transparent;
+    background: var(--sticky-editor-bg);
   }
 
   .editor-shell :global(.cm-content) {
+    min-height: 100%;
     color: var(--sticky-ink);
     caret-color: var(--sticky-caret);
+  }
+
+  .editor-shell :global(.cm-line),
+  .editor-shell :global(.md-mark),
+  .editor-shell :global(.md-strong),
+  .editor-shell :global(.md-em),
+  .editor-shell :global(.md-strike),
+  .editor-shell :global(.md-code),
+  .editor-shell :global(.md-link),
+  .editor-shell :global(.md-url) {
+    color: var(--sticky-ink);
   }
 
   .editor-shell :global(.cm-cursor),
@@ -585,10 +600,11 @@
   }
 
   .editor-shell :global(.cm-scroller) {
+    background: var(--sticky-editor-bg);
     padding: 14px 14px 18px;
     font-size: 14px;
     line-height: 1.45;
-    color: #2b230f;
+    color: var(--sticky-ink);
   }
 
   .empty {
