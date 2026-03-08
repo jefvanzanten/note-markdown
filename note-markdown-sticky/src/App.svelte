@@ -14,7 +14,19 @@
     updateTabContent
   } from "@note/shared-api";
   import type { TabDto } from "@note/shared-types";
-  import { runAction, saveWithFallback, toDirectory } from "@note/shared-utils";
+  import {
+    DEFAULT_EDITOR_FONT_SIZE_PX,
+    EDITOR_FONT_SIZE_STEP_PX,
+    clampEditorFontSize,
+    isZoomInShortcut,
+    isZoomOutShortcut,
+    loadEditorFontSize,
+    removeEditorFontSize,
+    runAction,
+    saveEditorFontSize,
+    saveWithFallback,
+    toDirectory
+  } from "@note/shared-utils";
   import SettingsMenu from "./lib/components/SettingsMenu/SettingsMenu.svelte";
   import { deriveStickyTheme, normalizeHexColor } from "./lib/utils/colorSystem";
   import {
@@ -34,6 +46,7 @@
   const STICKY_MIN_WIDTH = 300;
   const STICKY_MIN_HEIGHT = 260;
   const SETTINGS_MENU_ID = "sticky-settings-menu";
+  const STICKY_EDITOR_ZOOM_STORAGE_KEY = "note-markdown-sticky-editor-zoom-v1";
 
   let tab: TabDto | null = null;
   let sessionSaveDirectory: string | null = null;
@@ -48,6 +61,7 @@
   let persistWindowSizeTimer: number | null = null;
   let copyFeedbackTimer: number | null = null;
   let markdownCopied = false;
+  let editorFontSize = DEFAULT_EDITOR_FONT_SIZE_PX;
 
   const clearError = () => {
     errorMessage = null;
@@ -138,6 +152,10 @@
     stickyOpacity = style.opacity;
   };
 
+  const applyEditorZoomState = (tabId: string) => {
+    editorFontSize = loadEditorFontSize(STICKY_EDITOR_ZOOM_STORAGE_KEY, tabId);
+  };
+
   const persistStyleState = () => {
     if (!tab) return;
     saveStyleForTab(tab.tab_id, stickyColor, stickyOpacity);
@@ -200,6 +218,15 @@
     tab = nextTab;
     hydrateSessionDirectory(nextTab);
     applyStyleState(nextTab.tab_id);
+    applyEditorZoomState(nextTab.tab_id);
+  };
+
+  const adjustEditorZoom = (delta: number) => {
+    if (!tab) return;
+    const nextSize = clampEditorFontSize(editorFontSize + delta);
+    if (nextSize === editorFontSize) return;
+    editorFontSize = nextSize;
+    saveEditorFontSize(STICKY_EDITOR_ZOOM_STORAGE_KEY, tab.tab_id, nextSize);
   };
 
   const syncTabContent = async (content: string, cursor: number) => {
@@ -314,6 +341,7 @@
       } else {
         await closeTab(current.tab_id).catch(() => null);
         removeStyleForTab(current.tab_id);
+        removeEditorFontSize(STICKY_EDITOR_ZOOM_STORAGE_KEY, current.tab_id);
       }
     }
 
@@ -376,6 +404,18 @@
 
     const hasCommandModifier = event.ctrlKey || event.metaKey;
     if (!hasCommandModifier) return;
+
+    if (isZoomInShortcut(event)) {
+      event.preventDefault();
+      adjustEditorZoom(EDITOR_FONT_SIZE_STEP_PX);
+      return;
+    }
+
+    if (isZoomOutShortcut(event)) {
+      event.preventDefault();
+      adjustEditorZoom(-EDITOR_FONT_SIZE_STEP_PX);
+      return;
+    }
 
     const key = event.key.toLowerCase();
     if (key === "n") {
@@ -531,7 +571,7 @@
     />
   {/if}
 
-  <section class="editor-shell">
+  <section class="editor-shell" style="--editor-font-size: {editorFontSize}px">
     {#if tab}
       <MarkdownEditor content={tab.content} onChange={(value, cursor) => void syncTabContent(value, cursor)} />
     {:else}
@@ -781,6 +821,7 @@
   .editor-shell :global(.cm-editor) {
     height: 100%;
     background: var(--sticky-editor-bg);
+    font-size: var(--editor-font-size, 14px);
   }
 
   .editor-shell :global(.cm-content) {
@@ -814,7 +855,7 @@
   .editor-shell :global(.cm-scroller) {
     background: var(--sticky-editor-bg);
     padding: 0;
-    font-size: 14px;
+    font-size: var(--editor-font-size, 14px);
     line-height: 1.45;
     color: var(--sticky-ink);
   }

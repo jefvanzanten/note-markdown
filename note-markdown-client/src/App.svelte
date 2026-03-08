@@ -13,8 +13,22 @@
   } from "@note/shared-api";
   import { activeTabId, tabs, upsertTab, removeTab } from "@note/shared-state";
   import type { TabDto } from "@note/shared-types";
-  import { runAction, saveWithFallback, toDirectory } from "@note/shared-utils";
+  import {
+    DEFAULT_EDITOR_FONT_SIZE_PX,
+    EDITOR_FONT_SIZE_STEP_PX,
+    clampEditorFontSize,
+    isZoomInShortcut,
+    isZoomOutShortcut,
+    loadEditorFontSize,
+    removeEditorFontSize,
+    runAction,
+    saveEditorFontSize,
+    saveWithFallback,
+    toDirectory
+  } from "@note/shared-utils";
   import HamburgerMenu from "./lib/components/HamburgerMenu.svelte";
+
+  const CLIENT_EDITOR_ZOOM_STORAGE_KEY = "note-markdown-client-editor-zoom-v1";
 
   let currentTabs: TabDto[] = [];
   let currentActiveTab: TabDto | null = null;
@@ -24,6 +38,7 @@
   let errorMessage: string | null = null;
   let copyFeedbackTimer: number | null = null;
   let markdownCopied = false;
+  let editorFontSize = DEFAULT_EDITOR_FONT_SIZE_PX;
 
   const clearError = () => {
     errorMessage = null;
@@ -55,9 +70,20 @@
 
   $: currentTabs = $tabs;
   $: currentActiveTab = currentTabs.find((t) => t.tab_id === $activeTabId) ?? null;
+  $: editorFontSize = currentActiveTab
+    ? loadEditorFontSize(CLIENT_EDITOR_ZOOM_STORAGE_KEY, currentActiveTab.tab_id)
+    : DEFAULT_EDITOR_FONT_SIZE_PX;
 
   const setActive = (tabId: string) => {
     activeTabId.set(tabId);
+  };
+
+  const adjustActiveEditorZoom = (delta: number) => {
+    if (!currentActiveTab) return;
+    const nextSize = clampEditorFontSize(editorFontSize + delta);
+    if (nextSize === editorFontSize) return;
+    editorFontSize = nextSize;
+    saveEditorFontSize(CLIENT_EDITOR_ZOOM_STORAGE_KEY, currentActiveTab.tab_id, nextSize);
   };
 
   const syncTabContent = async (tab: TabDto, content: string, cursor: number) => {
@@ -131,6 +157,7 @@
   const closeTabById = async (tabId: string) => {
     if (currentTabs.length <= 1) return;
     await closeTab(tabId);
+    removeEditorFontSize(CLIENT_EDITOR_ZOOM_STORAGE_KEY, tabId);
     removeTab(tabId);
     if ($activeTabId === tabId) {
       const next = currentTabs.find((t) => t.tab_id !== tabId) ?? null;
@@ -198,6 +225,18 @@
     const handleKeydown = (e: KeyboardEvent) => {
       const hasCommandModifier = e.ctrlKey || e.metaKey;
       if (!hasCommandModifier) return;
+
+      if (isZoomInShortcut(e)) {
+        e.preventDefault();
+        adjustActiveEditorZoom(EDITOR_FONT_SIZE_STEP_PX);
+        return;
+      }
+
+      if (isZoomOutShortcut(e)) {
+        e.preventDefault();
+        adjustActiveEditorZoom(-EDITOR_FONT_SIZE_STEP_PX);
+        return;
+      }
 
       const key = e.key.toLowerCase();
       if (key === "n") {
@@ -270,7 +309,7 @@
     </div>
   </section>
 
-  <section class="editor">
+  <section class="editor" style="--editor-font-size: {editorFontSize}px">
     {#if currentActiveTab}
       <MarkdownEditor
         content={currentActiveTab.content}
@@ -475,6 +514,10 @@
     min-height: 0;
   }
 
+  .editor :global(.cm-editor) {
+    font-size: var(--editor-font-size, 14px);
+  }
+
   .editor :global(.cm-content) {
     min-height: 100%;
     min-width: 100%;
@@ -484,6 +527,7 @@
 
   .editor :global(.cm-scroller) {
     padding: 0;
+    font-size: var(--editor-font-size, 14px);
   }
 
   .editor :global(.cm-line) {
