@@ -28,13 +28,16 @@ importers:
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^3.1.2
-        version: 3.1.2(svelte@4.2.20)(vite@5.4.21)
+        version: 3.1.2(svelte@4.2.20)(vite@5.4.21(@types/node@25.3.5))
       '@tauri-apps/cli':
         specifier: ^2
         version: 2.10.1
       '@tsconfig/svelte':
         specifier: ^5.0.4
         version: 5.0.8
+      '@types/node':
+        specifier: '>=20'
+        version: 25.3.5
       svelte:
         specifier: ^4.2.18
         version: 4.2.20
@@ -49,7 +52,7 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^5.4.8
-        version: 5.4.21
+        version: 5.4.21(@types/node@25.3.5)
 
   note-markdown-sticky:
     dependencies:
@@ -71,7 +74,7 @@ importers:
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^3.1.2
-        version: 3.1.2(svelte@4.2.20)(vite@5.4.21)
+        version: 3.1.2(svelte@4.2.20)(vite@5.4.21(@types/node@25.3.5))
       '@tauri-apps/cli':
         specifier: ^2
         version: 2.10.1
@@ -92,7 +95,7 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^5.4.8
-        version: 5.4.21
+        version: 5.4.21(@types/node@25.3.5)
 
   shared/note-shared-api:
     dependencies:
@@ -144,7 +147,11 @@ importers:
 
   shared/note-shared-types: {}
 
-  shared/note-shared-utils: {}
+  shared/note-shared-utils:
+    dependencies:
+      '@tauri-apps/api':
+        specifier: ^2
+        version: 2.10.1
 
 packages:
 
@@ -598,6 +605,9 @@ packages:
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
+  '@types/node@25.3.5':
+    resolution: {integrity: sha512-oX8xrhvpiyRCQkG1MFchB09f+cXftgIXb3a7UUa4Y3wpmZPw5tyZGTLWhlESOLq1Rq6oDlc8npVU2/9xiCuXMA==}
+
   '@types/pug@2.0.10':
     resolution: {integrity: sha512-Sk/uYFOBAB7mb74XcpizmH0KOR2Pv3D2Hmrh1Dmy5BmK3MpdSa5kqZcg6EKBdklU0bFXX9gCfzvpnyUehrPIuA==}
 
@@ -894,6 +904,9 @@ packages:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
     hasBin: true
+
+  undici-types@7.18.2:
+    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
   vite@5.4.21:
     resolution: {integrity: sha512-o5a9xKjbtuhY6Bi5S3+HvbRERmouabWbyUcpXXUA1u+GNUKoROi9byOJ8M0nHbHYHkYICiMlqxkg1KkYmm25Sw==}
@@ -1220,26 +1233,26 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.59.0':
     optional: true
 
-  '@sveltejs/vite-plugin-svelte-inspector@2.1.0(@sveltejs/vite-plugin-svelte@3.1.2(svelte@4.2.20)(vite@5.4.21))(svelte@4.2.20)(vite@5.4.21)':
+  '@sveltejs/vite-plugin-svelte-inspector@2.1.0(@sveltejs/vite-plugin-svelte@3.1.2(svelte@4.2.20)(vite@5.4.21(@types/node@25.3.5)))(svelte@4.2.20)(vite@5.4.21(@types/node@25.3.5))':
     dependencies:
-      '@sveltejs/vite-plugin-svelte': 3.1.2(svelte@4.2.20)(vite@5.4.21)
+      '@sveltejs/vite-plugin-svelte': 3.1.2(svelte@4.2.20)(vite@5.4.21(@types/node@25.3.5))
       debug: 4.4.3
       svelte: 4.2.20
-      vite: 5.4.21
+      vite: 5.4.21(@types/node@25.3.5)
     transitivePeerDependencies:
       - supports-color
 
-  '@sveltejs/vite-plugin-svelte@3.1.2(svelte@4.2.20)(vite@5.4.21)':
+  '@sveltejs/vite-plugin-svelte@3.1.2(svelte@4.2.20)(vite@5.4.21(@types/node@25.3.5))':
     dependencies:
-      '@sveltejs/vite-plugin-svelte-inspector': 2.1.0(@sveltejs/vite-plugin-svelte@3.1.2(svelte@4.2.20)(vite@5.4.21))(svelte@4.2.20)(vite@5.4.21)
+      '@sveltejs/vite-plugin-svelte-inspector': 2.1.0(@sveltejs/vite-plugin-svelte@3.1.2(svelte@4.2.20)(vite@5.4.21(@types/node@25.3.5)))(svelte@4.2.20)(vite@5.4.21(@types/node@25.3.5))
       debug: 4.4.3
       deepmerge: 4.3.1
       kleur: 4.1.5
       magic-string: 0.30.21
       svelte: 4.2.20
       svelte-hmr: 0.16.0(svelte@4.2.20)
-      vite: 5.4.21
-      vitefu: 0.2.5(vite@5.4.21)
+      vite: 5.4.21(@types/node@25.3.5)
+      vitefu: 0.2.5(vite@5.4.21(@types/node@25.3.5))
     transitivePeerDependencies:
       - supports-color
 
@@ -1299,6 +1312,10 @@ snapshots:
   '@tsconfig/svelte@5.0.8': {}
 
   '@types/estree@1.0.8': {}
+
+  '@types/node@25.3.5':
+    dependencies:
+      undici-types: 7.18.2
 
   '@types/pug@2.0.10': {}
 
@@ -1622,17 +1639,20 @@ snapshots:
 
   typescript@5.9.3: {}
 
-  vite@5.4.21:
+  undici-types@7.18.2: {}
+
+  vite@5.4.21(@types/node@25.3.5):
     dependencies:
       esbuild: 0.21.5
       postcss: 8.5.8
       rollup: 4.59.0
     optionalDependencies:
+      '@types/node': 25.3.5
       fsevents: 2.3.3
 
-  vitefu@0.2.5(vite@5.4.21):
+  vitefu@0.2.5(vite@5.4.21(@types/node@25.3.5)):
     optionalDependencies:
-      vite: 5.4.21
+      vite: 5.4.21(@types/node@25.3.5)
 
   w3c-keyname@2.2.8: {}
 

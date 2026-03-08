@@ -10,12 +10,14 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri",
-    "android:build": "tauri android build --apk",
+    "android:build": "tauri android build --target aarch64",
+    "android:install": "tauri android build --target aarch64 --debug && adb install src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk",
     "android:dev": "tauri android dev"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^3.1.2",
     "@tauri-apps/cli": "^2",
+    "@types/node": ">=20",
     "@tsconfig/svelte": "^5.0.4",
     "svelte": "^4.2.18",
     "svelte-check": "^3.8.6",

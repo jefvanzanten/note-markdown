@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { EditorSelection, EditorState } from "@codemirror/state";
+  import { EditorSelection, EditorState, Transaction } from "@codemirror/state";
   import type { Range } from "@codemirror/state";
   import {
     Decoration,
@@ -17,7 +17,11 @@
 
   export let content = "";
   export let sessionId: string = "";
-  export let onChange: (sessionId: string, value: string, cursor: number) => void;
+  export let onChange: (
+    sessionId: string,
+    value: string,
+    cursor: number,
+  ) => void;
 
   let host: HTMLDivElement;
   let editorView: EditorView | null = null;
@@ -120,7 +124,8 @@
   };
 
   const findChecklistItem = (state: EditorState, lineFrom: number) =>
-    collectChecklistItems(state).find((item) => item.lineFrom === lineFrom) ?? null;
+    collectChecklistItems(state).find((item) => item.lineFrom === lineFrom) ??
+    null;
 
   const collectDocLines = (state: EditorState) => {
     const lines: string[] = [];
@@ -155,10 +160,12 @@
     view: EditorView,
     sourceLineFrom: number,
     targetLineFrom: number,
-    placeAfter: boolean
+    placeAfter: boolean,
   ) => {
     const checklistItems = collectChecklistItems(view.state);
-    const sourceItem = checklistItems.find((item) => item.lineFrom === sourceLineFrom);
+    const sourceItem = checklistItems.find(
+      (item) => item.lineFrom === sourceLineFrom,
+    );
 
     if (!sourceItem) {
       return;
@@ -264,7 +271,11 @@
     taskDragGhostEl = ghost;
   };
 
-  const showTaskDropIndicator = (view: EditorView, targetLineFrom: number, placeAfter: boolean) => {
+  const showTaskDropIndicator = (
+    view: EditorView,
+    targetLineFrom: number,
+    placeAfter: boolean,
+  ) => {
     if (!taskDropIndicatorEl) {
       const indicator = document.createElement("div");
       indicator.className = "cm-task-drop-indicator";
@@ -277,7 +288,10 @@
     const y = view.documentTop + (placeAfter ? block.bottom : block.top);
     const scrollerRect = view.scrollDOM.getBoundingClientRect();
     const left = Math.round(scrollerRect.left + editorSidePaddingPx);
-    const width = Math.max(36, Math.round(scrollerRect.width - editorSidePaddingPx * 2));
+    const width = Math.max(
+      36,
+      Math.round(scrollerRect.width - editorSidePaddingPx * 2),
+    );
 
     taskDropIndicatorEl.style.transform = `translate(${left}px, ${Math.round(y - 1)}px)`;
     taskDropIndicatorEl.style.width = `${width}px`;
@@ -302,7 +316,7 @@
     view: EditorView,
     x: number,
     y: number,
-    _sourceGroupId: number
+    _sourceGroupId: number,
   ) => {
     const pos = view.posAtCoords({ x, y }, false);
     if (pos === null) {
@@ -314,7 +328,11 @@
     return { targetLineFrom: line.from, placeAfter };
   };
 
-  const startTaskDrag = (view: EditorView, event: PointerEvent, sourceLineFrom: number) => {
+  const startTaskDrag = (
+    view: EditorView,
+    event: PointerEvent,
+    sourceLineFrom: number,
+  ) => {
     if (event.button !== 0) {
       return;
     }
@@ -359,7 +377,7 @@
         view,
         moveEvent.clientX,
         moveEvent.clientY,
-        taskDragState.sourceGroupId
+        taskDragState.sourceGroupId,
       );
 
       if (!target) {
@@ -386,7 +404,12 @@
         return;
       }
 
-      moveTaskLine(view, drag.sourceLineFrom, drag.targetLineFrom, drag.placeAfter);
+      moveTaskLine(
+        view,
+        drag.sourceLineFrom,
+        drag.targetLineFrom,
+        drag.placeAfter,
+      );
     };
 
     window.addEventListener("pointermove", onPointerMove, true);
@@ -414,7 +437,10 @@
       handle.className = "cm-task-handle";
       handle.tabIndex = -1;
       handle.title = "Sleep om checklist-item te verplaatsen";
-      handle.setAttribute("aria-label", "Sleep om checklist-item te verplaatsen");
+      handle.setAttribute(
+        "aria-label",
+        "Sleep om checklist-item te verplaatsen",
+      );
       handle.addEventListener("pointerdown", (event) => {
         startTaskDrag(view, event, this.lineFrom);
       });
@@ -476,7 +502,12 @@
       }
 
       update(u: ViewUpdate) {
-        if (u.docChanged || u.viewportChanged || u.selectionSet || u.focusChanged) {
+        if (
+          u.docChanged ||
+          u.viewportChanged ||
+          u.selectionSet ||
+          u.focusChanged
+        ) {
           this.decorations = this.build(u.view);
         }
       }
@@ -484,7 +515,10 @@
       build(view: EditorView): DecorationSet {
         const decs: Range<Decoration>[] = [];
         const checklistByLine = new Map(
-          collectChecklistItems(view.state).map((item) => [item.lineFrom, item])
+          collectChecklistItems(view.state).map((item) => [
+            item.lineFrom,
+            item,
+          ]),
         );
         const activeLine = view.hasFocus
           ? view.state.doc.lineAt(view.state.selection.main.head).number
@@ -496,12 +530,17 @@
           const hm = line.text.match(/^(#{1,6}) /);
           if (hm) {
             decs.push(
-              Decoration.line({ class: `md-h${hm[1].length}` }).range(line.from)
+              Decoration.line({ class: `md-h${hm[1].length}` }).range(
+                line.from,
+              ),
             );
 
             if (ln !== activeLine) {
               decs.push(
-                Decoration.replace({}).range(line.from, line.from + hm[0].length)
+                Decoration.replace({}).range(
+                  line.from,
+                  line.from + hm[0].length,
+                ),
               );
             }
           }
@@ -512,22 +551,25 @@
               Decoration.widget({
                 widget: new DragHandleWidget(checklistItem.lineFrom),
                 side: -1,
-              }).range(checklistItem.handleFrom)
+              }).range(checklistItem.handleFrom),
             );
             decs.push(
               Decoration.replace({
                 widget: new CheckboxWidget(
                   checklistItem.checked,
-                  checklistItem.checkboxFrom
+                  checklistItem.checkboxFrom,
                 ),
-              }).range(checklistItem.checkboxFrom, checklistItem.checkboxFrom + 3)
+              }).range(
+                checklistItem.checkboxFrom,
+                checklistItem.checkboxFrom + 3,
+              ),
             );
           }
         }
         return Decoration.set(decs);
       }
     },
-    { decorations: (v) => v.decorations }
+    { decorations: (v) => v.decorations },
   );
 
   const edgeAwarePos = (view: EditorView, x: number, y: number) => {
@@ -538,7 +580,10 @@
     }
 
     if (y > bottom) {
-      return view.posAndSideAtCoords({ x, y: lineCenterY(view, view.state.doc.length) }, false);
+      return view.posAndSideAtCoords(
+        { x, y: lineCenterY(view, view.state.doc.length) },
+        false,
+      );
     }
 
     return view.posAndSideAtCoords({ x, y }, false);
@@ -552,7 +597,7 @@
           selection.ranges.slice(0, i).concat(selection.ranges.slice(i + 1)),
           selection.mainIndex === i
             ? 0
-            : selection.mainIndex - (selection.mainIndex > i ? 1 : 0)
+            : selection.mainIndex - (selection.mainIndex > i ? 1 : 0),
         );
       }
     }
@@ -560,49 +605,55 @@
     return null;
   };
 
-  const edgeWhitespaceSelection = EditorView.mouseSelectionStyle.of((view, event) => {
-    if (event.button !== 0 || event.detail !== 1) return null;
+  const edgeWhitespaceSelection = EditorView.mouseSelectionStyle.of(
+    (view, event) => {
+      if (event.button !== 0 || event.detail !== 1) return null;
 
-    const { top, bottom } = textVerticalBounds(view);
-    if (event.clientY >= top && event.clientY <= bottom) return null;
+      const { top, bottom } = textVerticalBounds(view);
+      if (event.clientY >= top && event.clientY <= bottom) return null;
 
-    let start = edgeAwarePos(view, event.clientX, event.clientY);
-    let startSelection = view.state.selection;
+      let start = edgeAwarePos(view, event.clientX, event.clientY);
+      let startSelection = view.state.selection;
 
-    return {
-      update(update) {
-        if (update.docChanged) {
-          start = { ...start, pos: update.changes.mapPos(start.pos) };
-          startSelection = startSelection.map(update.changes);
-        }
-      },
-      get(curEvent, extend, multiple) {
-        const current = edgeAwarePos(view, curEvent.clientX, curEvent.clientY);
-        let range = EditorSelection.cursor(current.pos, current.assoc);
-
-        if (start.pos !== current.pos && !extend) {
-          range = EditorSelection.range(start.pos, current.pos);
-        }
-
-        if (extend) {
-          return startSelection.replaceRange(
-            startSelection.main.extend(range.from, range.to)
+      return {
+        update(update) {
+          if (update.docChanged) {
+            start = { ...start, pos: update.changes.mapPos(start.pos) };
+            startSelection = startSelection.map(update.changes);
+          }
+        },
+        get(curEvent, extend, multiple) {
+          const current = edgeAwarePos(
+            view,
+            curEvent.clientX,
+            curEvent.clientY,
           );
-        }
+          let range = EditorSelection.cursor(current.pos, current.assoc);
 
-        if (multiple && startSelection.ranges.length > 1) {
-          const removed = removeRangeAround(startSelection, current.pos);
-          if (removed) return removed;
-        }
+          if (start.pos !== current.pos && !extend) {
+            range = EditorSelection.range(start.pos, current.pos);
+          }
 
-        if (multiple) {
-          return startSelection.addRange(range);
-        }
+          if (extend) {
+            return startSelection.replaceRange(
+              startSelection.main.extend(range.from, range.to),
+            );
+          }
 
-        return EditorSelection.create([range]);
-      },
-    };
-  });
+          if (multiple && startSelection.ranges.length > 1) {
+            const removed = removeRangeAround(startSelection, current.pos);
+            if (removed) return removed;
+          }
+
+          if (multiple) {
+            return startSelection.addRange(range);
+          }
+
+          return EditorSelection.create([range]);
+        },
+      };
+    },
+  );
 
   const queueChange = (value: string, cursor: number) => {
     if (pendingChangeTimeout) {
@@ -634,7 +685,7 @@
                 borderLeftWidth: "2px",
               },
             },
-            { dark: true }
+            { dark: true },
           ),
           keymap.of([
             { key: "Mod-z", run: () => undo(editorView!) },
@@ -644,7 +695,10 @@
           EditorView.lineWrapping,
           EditorView.updateListener.of((update) => {
             if (!update.docChanged && !update.selectionSet) return;
-            queueChange(update.state.doc.toString(), update.state.selection.main.head);
+            queueChange(
+              update.state.doc.toString(),
+              update.state.selection.main.head,
+            );
           }),
         ],
       }),
@@ -662,7 +716,7 @@
     editorView.dispatch({
       changes: { from: 0, to: editorView.state.doc.length, insert: content },
       selection: { anchor: Math.min(sel, content.length) },
-      annotations: EditorState.addToHistory.of(false),
+      annotations: Transaction.addToHistory.of(false),
     });
   }
 

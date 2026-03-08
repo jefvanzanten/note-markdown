@@ -8,10 +8,10 @@ name = "note_markdown"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.0.2", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 note-core = { path = "../../shared/note-core" }
 note-tauri-commands = { path = "../../shared/note-tauri-commands" }
-tauri = { version = "2.0.6", features = [] }
-tauri-plugin-dialog = "2.0.1"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
