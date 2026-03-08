@@ -1,22 +1,16 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-
   export let menuId = "sticky-hamburger-menu";
   export let canSave = false;
   export let onNewSticky: () => void = () => {};
   export let onSave: () => void = () => {};
   export let onSettings: () => void = () => {};
 
-  let showMenu = false;
-  let menuButtonElement: HTMLButtonElement | null = null;
+  let menuOpen = false;
   let menuPanelElement: HTMLDivElement | null = null;
 
   const closeMenu = () => {
-    showMenu = false;
-  };
-
-  const toggleMenu = () => {
-    showMenu = !showMenu;
+    if (!menuPanelElement?.matches(":popover-open")) return;
+    menuPanelElement.hidePopover();
   };
 
   const runMenuAction = (action: () => void) => {
@@ -24,43 +18,23 @@
     action();
   };
 
-  onMount(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!showMenu || event.button !== 0) return;
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (menuPanelElement?.contains(target) || menuButtonElement?.contains(target)) {
-        return;
-      }
-      closeMenu();
-    };
-
-    const handleKeydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeMenu();
-      }
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleKeydown);
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeydown);
-    };
-  });
+  const syncMenuState = (event: Event) => {
+    const popover = event.currentTarget as HTMLDivElement | null;
+    menuOpen = popover?.matches(":popover-open") ?? false;
+  };
 </script>
 
-<div class="menu-shell" data-tauri-drag-region="false" on:pointerdown|stopPropagation>
+<div class="menu-shell">
   <button
-    bind:this={menuButtonElement}
     class="menu-trigger"
     type="button"
     title="Menu"
     aria-label="Open sticky menu"
+    aria-haspopup="menu"
     aria-controls={menuId}
-    aria-expanded={showMenu}
-    data-tauri-drag-region="false"
-    on:click={toggleMenu}
+    aria-expanded={menuOpen}
+    popovertarget={menuId}
+    popovertargetaction="toggle"
   >
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 7h16" />
@@ -69,48 +43,26 @@
     </svg>
   </button>
 
-  {#if showMenu}
-    <div
-      id={menuId}
-      bind:this={menuPanelElement}
-      class="menu-panel"
-      role="menu"
-      data-tauri-drag-region="false"
-      on:pointerdown|stopPropagation
+  <div id={menuId} bind:this={menuPanelElement} class="menu-panel" role="menu" popover="auto" on:toggle={syncMenuState}>
+    <button class="menu-item" role="menuitem" type="button" on:click={() => runMenuAction(onNewSticky)}>
+      Nieuwe sticky
+    </button>
+
+    <button
+      class="menu-item"
+      role="menuitem"
+      type="button"
+      disabled={!canSave}
+      aria-disabled={!canSave}
+      on:click={() => runMenuAction(onSave)}
     >
-      <button
-        class="menu-item"
-        role="menuitem"
-        type="button"
-        data-tauri-drag-region="false"
-        on:click={() => runMenuAction(onNewSticky)}
-      >
-        Nieuwe sticky
-      </button>
+      Opslaan
+    </button>
 
-      <button
-        class="menu-item"
-        role="menuitem"
-        type="button"
-        data-tauri-drag-region="false"
-        disabled={!canSave}
-        aria-disabled={!canSave}
-        on:click={() => runMenuAction(onSave)}
-      >
-        Opslaan
-      </button>
-
-      <button
-        class="menu-item"
-        role="menuitem"
-        type="button"
-        data-tauri-drag-region="false"
-        on:click={() => runMenuAction(onSettings)}
-      >
-        Instellingen
-      </button>
-    </div>
-  {/if}
+    <button class="menu-item" role="menuitem" type="button" on:click={() => runMenuAction(onSettings)}>
+      Instellingen
+    </button>
+  </div>
 </div>
 
 <style>
@@ -124,6 +76,7 @@
   .menu-trigger {
     width: 30px;
     height: 24px;
+    anchor-name: --sticky-actions-anchor;
     border: none;
     border-radius: 7px;
     background: transparent;
@@ -155,9 +108,11 @@
   }
 
   .menu-panel {
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 0;
+    margin: 0;
+    inset: auto;
+    position: fixed;
+    top: 42px;
+    left: 8px;
     z-index: 60;
     min-width: 170px;
     padding: 6px;
@@ -167,6 +122,14 @@
     box-shadow: 0 10px 20px color-mix(in srgb, var(--sticky-shadow) 60%, #000 40%);
     display: grid;
     gap: 4px;
+  }
+
+  @supports (position-anchor: --sticky-actions-anchor) and (top: anchor(bottom)) {
+    .menu-panel {
+      position-anchor: --sticky-actions-anchor;
+      top: calc(anchor(bottom) + 8px);
+      left: anchor(left);
+    }
   }
 
   .menu-item {

@@ -530,10 +530,9 @@
       class="close-action"
       title="Sluiten"
       aria-label="Sluiten"
-      data-tauri-drag-region="false"
       on:click={() => void requestClose()}
     >
-      Sluiten
+      x
     </button>
   </header>
 
@@ -640,16 +639,17 @@
   }
 
   .close-action {
+    width: 24px;
     height: 24px;
     border: none;
     border-radius: 7px;
     background: transparent;
     color: var(--sticky-action-ink);
     cursor: pointer;
-    padding: 0 10px;
-    font-size: 12px;
+    padding: 0;
+    font-size: 14px;
     font-weight: 600;
-    letter-spacing: 0.02em;
+    line-height: 1;
     transition: background-color 120ms ease, transform 120ms ease;
     text-shadow: 0 0 6px rgba(0, 0, 0, 0.18);
   }
