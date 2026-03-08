@@ -31,6 +31,410 @@
     { tag: tags.url, class: "md-url" },
   ]);
 
+  const checklistPattern = /^(\s*)([-*+] )\[([ xX])\]/;
+  const editorSidePaddingPx = 16;
+
+  type ParsedChecklistLine = {
+    indent: string;
+    bullet: string;
+    checked: boolean;
+    text: string;
+  };
+
+  type ChecklistItem = {
+    lineNumber: number;
+    lineFrom: number;
+    handleFrom: number;
+    checkboxFrom: number;
+    checked: boolean;
+    groupId: number;
+  };
+
+  type TaskDragState = {
+    sourceLineFrom: number;
+    sourceGroupId: number;
+    startX: number;
+    startY: number;
+    hasMoved: boolean;
+    targetLineFrom: number | null;
+    placeAfter: boolean;
+  };
+
+  let taskDragState: TaskDragState | null = null;
+  let removeTaskDragListeners: (() => void) | null = null;
+  let taskDragGhostEl: HTMLDivElement | null = null;
+  let taskDropIndicatorEl: HTMLDivElement | null = null;
+
+  const parseChecklistLine = (lineText: string): ParsedChecklistLine | null => {
+    const match = lineText.match(checklistPattern);
+    if (!match) {
+      return null;
+    }
+
+    return {
+      indent: match[1],
+      bullet: match[2],
+      checked: match[3].toLowerCase() === "x",
+      text: lineText.slice(match[0].length),
+    };
+  };
+
+  const collectChecklistItems = (state: EditorState): ChecklistItem[] => {
+    const items: ChecklistItem[] = [];
+    let groupId = -1;
+    let previousWasChecklist = false;
+
+    for (let ln = 1; ln <= state.doc.lines; ln++) {
+      const line = state.doc.line(ln);
+      const parsed = parseChecklistLine(line.text);
+
+      if (!parsed) {
+        previousWasChecklist = false;
+        continue;
+      }
+
+      if (!previousWasChecklist) {
+        groupId += 1;
+      }
+      previousWasChecklist = true;
+
+      const handleFrom = line.from + parsed.indent.length;
+      const checkboxFrom = handleFrom + parsed.bullet.length;
+
+      items.push({
+        lineNumber: ln,
+        lineFrom: line.from,
+        handleFrom,
+        checkboxFrom,
+        checked: parsed.checked,
+        groupId,
+      });
+    }
+
+    return items;
+  };
+
+  const findChecklistItem = (state: EditorState, lineFrom: number) =>
+    collectChecklistItems(state).find((item) => item.lineFrom === lineFrom) ?? null;
+
+  const collectDocLines = (state: EditorState) => {
+    const lines: string[] = [];
+    for (let ln = 1; ln <= state.doc.lines; ln++) {
+      lines.push(state.doc.line(ln).text);
+    }
+    return lines;
+  };
+
+  const lineStartAtIndex = (lines: string[], index: number) => {
+    let pos = 0;
+    for (let i = 0; i < index; i++) {
+      pos += lines[i].length + 1;
+    }
+    return pos;
+  };
+
+  const lineCenterY = (view: EditorView, pos: number) => {
+    const block = view.lineBlockAt(pos);
+    return view.documentTop + block.top + block.height / 2;
+  };
+
+  const textVerticalBounds = (view: EditorView) => {
+    const first = view.lineBlockAt(0);
+    const last = view.lineBlockAt(view.state.doc.length);
+    const top = view.documentTop + first.top;
+    const bottom = view.documentTop + last.bottom;
+    return { top, bottom };
+  };
+
+  const moveTaskLine = (
+    view: EditorView,
+    sourceLineFrom: number,
+    targetLineFrom: number,
+    placeAfter: boolean
+  ) => {
+    const checklistItems = collectChecklistItems(view.state);
+    const sourceItem = checklistItems.find((item) => item.lineFrom === sourceLineFrom);
+    const targetItem = checklistItems.find((item) => item.lineFrom === targetLineFrom);
+
+    if (!sourceItem || !targetItem) {
+      return;
+    }
+
+    if (sourceItem.groupId !== targetItem.groupId) {
+      return;
+    }
+
+    const sourceLineNumber = sourceItem.lineNumber;
+    const targetLineNumber = targetItem.lineNumber;
+
+    if (sourceLineNumber === targetLineNumber) {
+      return;
+    }
+
+    const lines = collectDocLines(view.state);
+    const [movedLine] = lines.splice(sourceLineNumber - 1, 1);
+    if (movedLine === undefined) {
+      return;
+    }
+
+    let insertIndex = targetLineNumber - 1;
+    if (sourceLineNumber < targetLineNumber) {
+      insertIndex -= 1;
+    }
+    if (placeAfter) {
+      insertIndex += 1;
+    }
+
+    insertIndex = Math.max(0, Math.min(insertIndex, lines.length));
+
+    lines.splice(insertIndex, 0, movedLine);
+    const nextDoc = lines.join("\n");
+
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: nextDoc },
+      selection: { anchor: lineStartAtIndex(lines, insertIndex) },
+      scrollIntoView: true,
+    });
+    view.focus();
+  };
+
+  const clearTaskDragListeners = () => {
+    if (!removeTaskDragListeners) {
+      return;
+    }
+
+    removeTaskDragListeners();
+    removeTaskDragListeners = null;
+  };
+
+  const removeTaskDragGhost = () => {
+    if (!taskDragGhostEl) {
+      return;
+    }
+
+    taskDragGhostEl.remove();
+    taskDragGhostEl = null;
+  };
+
+  const removeTaskDropIndicator = () => {
+    if (!taskDropIndicatorEl) {
+      return;
+    }
+
+    taskDropIndicatorEl.remove();
+    taskDropIndicatorEl = null;
+  };
+
+  const updateTaskDragGhostPosition = (x: number, y: number) => {
+    if (!taskDragGhostEl) {
+      return;
+    }
+
+    taskDragGhostEl.style.transform = `translate(${Math.round(x + 14)}px, ${Math.round(y + 12)}px)`;
+  };
+
+  const showTaskDragGhost = (view: EditorView, sourceLineFrom: number) => {
+    removeTaskDragGhost();
+
+    const line = view.state.doc.lineAt(sourceLineFrom);
+    const parsed = parseChecklistLine(line.text);
+    if (!parsed) {
+      return;
+    }
+
+    const ghost = document.createElement("div");
+    ghost.className = "cm-task-drag-ghost";
+
+    const bullet = document.createElement("span");
+    bullet.className = "cm-task-drag-bullet";
+    bullet.textContent = parsed.bullet.trim();
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "cm-checkbox";
+    checkbox.checked = parsed.checked;
+    checkbox.disabled = true;
+
+    const text = document.createElement("span");
+    text.className = "cm-task-drag-text";
+    text.textContent = parsed.text || " ";
+
+    ghost.append(bullet, checkbox, text);
+    document.body.append(ghost);
+    taskDragGhostEl = ghost;
+  };
+
+  const showTaskDropIndicator = (view: EditorView, targetLineFrom: number, placeAfter: boolean) => {
+    if (!taskDropIndicatorEl) {
+      const indicator = document.createElement("div");
+      indicator.className = "cm-task-drop-indicator";
+      document.body.append(indicator);
+      taskDropIndicatorEl = indicator;
+    }
+
+    const line = view.state.doc.lineAt(targetLineFrom);
+    const block = view.lineBlockAt(line.from);
+    const y = view.documentTop + (placeAfter ? block.bottom : block.top);
+    const scrollerRect = view.scrollDOM.getBoundingClientRect();
+    const left = Math.round(scrollerRect.left + editorSidePaddingPx);
+    const width = Math.max(36, Math.round(scrollerRect.width - editorSidePaddingPx * 2));
+
+    taskDropIndicatorEl.style.transform = `translate(${left}px, ${Math.round(y - 1)}px)`;
+    taskDropIndicatorEl.style.width = `${width}px`;
+    taskDropIndicatorEl.style.display = "block";
+  };
+
+  const hideTaskDropIndicator = () => {
+    if (taskDropIndicatorEl) {
+      taskDropIndicatorEl.style.display = "none";
+    }
+  };
+
+  const stopTaskDrag = () => {
+    taskDragState = null;
+    clearTaskDragListeners();
+    removeTaskDragGhost();
+    removeTaskDropIndicator();
+    document.body.classList.remove("cm-task-reordering");
+  };
+
+  const taskDropTargetAtCoords = (
+    view: EditorView,
+    x: number,
+    y: number,
+    sourceGroupId: number
+  ) => {
+    const pos = view.posAtCoords({ x, y }, false);
+    if (pos === null) {
+      return null;
+    }
+
+    const line = view.state.doc.lineAt(pos);
+    const targetItem = findChecklistItem(view.state, line.from);
+    if (!targetItem || targetItem.groupId !== sourceGroupId) {
+      return null;
+    }
+
+    const placeAfter = y > lineCenterY(view, targetItem.lineFrom);
+    return { targetLineFrom: targetItem.lineFrom, placeAfter };
+  };
+
+  const startTaskDrag = (view: EditorView, event: PointerEvent, sourceLineFrom: number) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const sourceItem = findChecklistItem(view.state, sourceLineFrom);
+    if (!sourceItem) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    stopTaskDrag();
+    taskDragState = {
+      sourceLineFrom,
+      sourceGroupId: sourceItem.groupId,
+      startX: event.clientX,
+      startY: event.clientY,
+      hasMoved: false,
+      targetLineFrom: null,
+      placeAfter: false,
+    };
+
+    document.body.classList.add("cm-task-reordering");
+    showTaskDragGhost(view, sourceLineFrom);
+    updateTaskDragGhostPosition(event.clientX, event.clientY);
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      if (!taskDragState) {
+        return;
+      }
+
+      updateTaskDragGhostPosition(moveEvent.clientX, moveEvent.clientY);
+
+      const movedX = Math.abs(moveEvent.clientX - taskDragState.startX);
+      const movedY = Math.abs(moveEvent.clientY - taskDragState.startY);
+      if (!taskDragState.hasMoved && (movedX > 3 || movedY > 3)) {
+        taskDragState.hasMoved = true;
+      }
+
+      const target = taskDropTargetAtCoords(
+        view,
+        moveEvent.clientX,
+        moveEvent.clientY,
+        taskDragState.sourceGroupId
+      );
+
+      if (!target) {
+        taskDragState.targetLineFrom = null;
+        hideTaskDropIndicator();
+        return;
+      }
+
+      taskDragState.targetLineFrom = target.targetLineFrom;
+      taskDragState.placeAfter = target.placeAfter;
+      showTaskDropIndicator(view, target.targetLineFrom, target.placeAfter);
+    };
+
+    const onPointerEnd = (endEvent: PointerEvent) => {
+      if (endEvent.type === "pointerup") {
+        endEvent.preventDefault();
+      }
+
+      const drag = taskDragState;
+      stopTaskDrag();
+
+      if (!drag || !drag.hasMoved || drag.targetLineFrom === null) {
+        view.focus();
+        return;
+      }
+
+      moveTaskLine(view, drag.sourceLineFrom, drag.targetLineFrom, drag.placeAfter);
+    };
+
+    window.addEventListener("pointermove", onPointerMove, true);
+    window.addEventListener("pointerup", onPointerEnd, true);
+    window.addEventListener("pointercancel", onPointerEnd, true);
+
+    removeTaskDragListeners = () => {
+      window.removeEventListener("pointermove", onPointerMove, true);
+      window.removeEventListener("pointerup", onPointerEnd, true);
+      window.removeEventListener("pointercancel", onPointerEnd, true);
+    };
+  };
+
+  class DragHandleWidget extends WidgetType {
+    lineFrom: number;
+
+    constructor(lineFrom: number) {
+      super();
+      this.lineFrom = lineFrom;
+    }
+
+    toDOM(view: EditorView): HTMLElement {
+      const handle = document.createElement("button");
+      handle.type = "button";
+      handle.className = "cm-task-handle";
+      handle.tabIndex = -1;
+      handle.title = "Sleep om checklist-item te verplaatsen";
+      handle.setAttribute("aria-label", "Sleep om checklist-item te verplaatsen");
+      handle.addEventListener("pointerdown", (event) => {
+        startTaskDrag(view, event, this.lineFrom);
+      });
+      return handle;
+    }
+
+    eq(other: DragHandleWidget): boolean {
+      return other.lineFrom === this.lineFrom;
+    }
+
+    ignoreEvent(): boolean {
+      return true;
+    }
+  }
+
   class CheckboxWidget extends WidgetType {
     checked: boolean;
     from: number;
@@ -84,6 +488,9 @@
 
       build(view: EditorView): DecorationSet {
         const decs: Range<Decoration>[] = [];
+        const checklistByLine = new Map(
+          collectChecklistItems(view.state).map((item) => [item.lineFrom, item])
+        );
         const activeLine = view.hasFocus
           ? view.state.doc.lineAt(view.state.selection.main.head).number
           : -1;
@@ -104,13 +511,21 @@
             }
           }
 
-          const cm = line.text.match(/^(\s*[-*+] )\[([ xX])\]/);
-          if (cm) {
-            const from = line.from + cm[1].length;
+          const checklistItem = checklistByLine.get(line.from);
+          if (checklistItem) {
+            decs.push(
+              Decoration.widget({
+                widget: new DragHandleWidget(checklistItem.lineFrom),
+                side: -1,
+              }).range(checklistItem.handleFrom)
+            );
             decs.push(
               Decoration.replace({
-                widget: new CheckboxWidget(cm[2].toLowerCase() === "x", from),
-              }).range(from, from + 3)
+                widget: new CheckboxWidget(
+                  checklistItem.checked,
+                  checklistItem.checkboxFrom
+                ),
+              }).range(checklistItem.checkboxFrom, checklistItem.checkboxFrom + 3)
             );
           }
         }
@@ -119,19 +534,6 @@
     },
     { decorations: (v) => v.decorations }
   );
-
-  const lineCenterY = (view: EditorView, pos: number) => {
-    const block = view.lineBlockAt(pos);
-    return view.documentTop + block.top + block.height / 2;
-  };
-
-  const textVerticalBounds = (view: EditorView) => {
-    const first = view.lineBlockAt(0);
-    const last = view.lineBlockAt(view.state.doc.length);
-    const top = view.documentTop + first.top;
-    const bottom = view.documentTop + last.bottom;
-    return { top, bottom };
-  };
 
   const edgeAwarePos = (view: EditorView, x: number, y: number) => {
     const { top, bottom } = textVerticalBounds(view);
@@ -264,6 +666,7 @@
     if (pendingChangeTimeout) {
       clearTimeout(pendingChangeTimeout);
     }
+    stopTaskDrag();
     editorView?.destroy();
   });
 </script>
@@ -363,12 +766,108 @@
     color: #64748b;
   }
 
+  :global(body.cm-task-reordering) {
+    cursor: grabbing;
+  }
+
+  :global(.cm-task-drag-ghost) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 1000;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: min(72vw, 680px);
+    padding: 5px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    background: rgba(15, 23, 42, 0.94);
+    color: #e2e8f0;
+    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.45);
+    opacity: 0.95;
+    font-family: "Fira Code", Consolas, monospace;
+    font-size: 14px;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+
+  :global(.cm-task-drag-bullet) {
+    color: #94a3b8;
+    font-weight: 700;
+    flex: 0 0 auto;
+  }
+
+  :global(.cm-task-drag-text) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  :global(.cm-task-drag-ghost .cm-checkbox) {
+    margin: 0;
+    pointer-events: none;
+    opacity: 1;
+  }
+
+  :global(.cm-task-drop-indicator) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 2px;
+    border-radius: 999px;
+    pointer-events: none;
+    z-index: 999;
+    background: #38bdf8;
+    box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.25);
+  }
+
+  :global(.cm-task-handle) {
+    width: 12px;
+    height: 14px;
+    border: 0;
+    padding: 0;
+    margin-right: 4px;
+    background: transparent;
+    color: #64748b;
+    cursor: grab;
+    display: inline-block;
+    vertical-align: middle;
+    position: relative;
+  }
+
+  :global(.cm-task-handle::before) {
+    content: "";
+    position: absolute;
+    left: 1px;
+    top: 2px;
+    width: 2px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentcolor;
+    box-shadow:
+      0 4px 0 currentcolor,
+      0 8px 0 currentcolor,
+      4px 0 0 currentcolor,
+      4px 4px 0 currentcolor,
+      4px 8px 0 currentcolor;
+  }
+
+  :global(.cm-task-handle:hover) {
+    color: #94a3b8;
+  }
+
+  :global(.cm-task-handle:active) {
+    cursor: grabbing;
+  }
+
   :global(.cm-checkbox) {
     cursor: pointer;
     width: 14px;
     height: 14px;
     vertical-align: middle;
-    margin-right: 3px;
+    margin-right: 0;
     accent-color: #0284c7;
   }
 </style>
