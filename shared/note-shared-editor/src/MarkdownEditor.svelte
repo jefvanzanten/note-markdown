@@ -13,13 +13,18 @@
   import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
   import { markdown } from "@codemirror/lang-markdown";
   import { tags } from "@lezer/highlight";
+  import { history, historyKeymap, undo, redo } from "@codemirror/commands";
 
   export let content = "";
-  export let onChange: (value: string, cursor: number) => void;
+  export let sessionId: string = "";
+  export let onChange: (sessionId: string, value: string, cursor: number) => void;
 
   let host: HTMLDivElement;
   let editorView: EditorView | null = null;
   let pendingChangeTimeout: ReturnType<typeof setTimeout> | null = null;
+  let currentSessionId: string = "";
+
+  const editorStates = new Map<string, EditorState>();
 
   const mdHighlight = HighlightStyle.define([
     { tag: tags.heading, class: "md-mark" },
@@ -616,7 +621,7 @@
 
     pendingChangeTimeout = setTimeout(() => {
       pendingChangeTimeout = null;
-      onChange(value, cursor);
+      onChange(sessionId, value, cursor);
     }, 300);
   };
 
@@ -625,6 +630,7 @@
       state: EditorState.create({
         doc: content,
         extensions: [
+          history(),
           markdown(),
           syntaxHighlighting(mdHighlight),
           mdPlugin,
@@ -638,7 +644,11 @@
             },
             { dark: true }
           ),
-          keymap.of([]),
+          keymap.of([
+            { key: "Mod-z", run: () => undo(editorView!) },
+            { key: "Mod-y", run: () => redo(editorView!) },
+            { key: "Shift-Mod-z", run: () => redo(editorView!) },
+          ]),
           EditorView.lineWrapping,
           EditorView.updateListener.of((update) => {
             if (!update.docChanged && !update.selectionSet) return;
@@ -648,6 +658,7 @@
       }),
       parent: host,
     });
+    currentSessionId = sessionId;
   };
 
   onMount(() => {
@@ -659,6 +670,7 @@
     editorView.dispatch({
       changes: { from: 0, to: editorView.state.doc.length, insert: content },
       selection: { anchor: Math.min(sel, content.length) },
+      annotations: EditorState.addToHistory.of(false),
     });
   }
 
