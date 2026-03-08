@@ -13,25 +13,27 @@ Workspace met twee Tauri apps die dezelfde markdown core en frontend bouwblokken
 ## Installeren
 
 ```bash
-npm install
+pnpm install
+```
+
+## Snelle worktree setup (pnpm)
+
+```bash
+pnpm run install:fast
 ```
 
 ## Ontwikkelen
 
 ```bash
-# frontend dev servers
-npm run dev:note-markdown-client
-npm run dev:note-markdown-sticky
-
 # tauri apps
-npm run tauri:note-markdown-client -- dev
-npm run tauri:note-markdown-sticky -- dev
+pnpm run note-client:dev
+pnpm run note-sticky:dev
 ```
 
 ## Checks
 
 ```bash
-npm run check
-npm run build
+pnpm run check
+pnpm run build
 cargo test -p note-core
 ```

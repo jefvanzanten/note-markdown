@@ -11,7 +11,7 @@
     }
   },
   "dependencies": {
-    "@note/shared-types": "*",
+    "@note/shared-types": "workspace:*",
     "svelte": "^4.2.18"
   }
 }

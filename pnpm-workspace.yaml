@@ -1,0 +1,8 @@
+packages:
+  - note-markdown-client
+  - note-markdown-sticky
+  - shared/*
+
+onlyBuiltDependencies:
+  - esbuild
+  - svelte-preprocess

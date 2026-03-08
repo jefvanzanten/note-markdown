@@ -13,28 +13,27 @@
 ## Install
 
 ```bash
-npm install
+pnpm install
 ```
 
-## Frontend Dev
+## Fast worktree setup
 
 ```bash
-npm run dev:note-markdown-client
-npm run dev:note-markdown-sticky
+pnpm run install:fast
 ```
 
 ## Tauri Dev
 
 ```bash
-npm run tauri:note-markdown-client -- dev
-npm run tauri:note-markdown-sticky -- dev
+pnpm run note-client:dev
+pnpm run note-sticky:dev
 ```
 
 ## Checks
 
 ```bash
-npm run check
-npm run build
+pnpm run check
+pnpm run build
 cargo test -p note-core
 cargo check -p note-markdown -p note-markdown-sticky
 ```

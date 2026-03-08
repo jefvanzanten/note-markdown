@@ -11,8 +11,8 @@
     }
   },
   "dependencies": {
-    "@note/shared-types": "*",
-    "@note/shared-utils": "*",
+    "@note/shared-types": "workspace:*",
+    "@note/shared-utils": "workspace:*",
     "@tauri-apps/api": "^2.1.0",
     "@tauri-apps/plugin-dialog": "^2.0.1"
   }

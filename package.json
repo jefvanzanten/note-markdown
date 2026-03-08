@@ -2,16 +2,19 @@
   "name": "note-markdown-workspace",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.28.2",
   "workspaces": [
     "note-markdown-client",
     "note-markdown-sticky",
     "shared/*"
   ],
   "scripts": {
-    "check": "npm run check --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present",
-    "note-sticky:dev": "npm run -w note-markdown-sticky tauri -- dev",
-    "note-sticky:build": "npm run -w note-markdown-sticky tauri -- build",
-    "note-client:build": "npm run -w note-markdown-client tauri -- build"
+    "check": "pnpm -r --if-present --filter \"./note-markdown-client\" --filter \"./note-markdown-sticky\" --filter \"./shared/*\" run check",
+    "build": "pnpm -r --if-present --filter \"./note-markdown-client\" --filter \"./note-markdown-sticky\" --filter \"./shared/*\" run build",
+    "note-client:dev": "pnpm --filter note-markdown-client run tauri dev",
+    "note-sticky:dev": "pnpm --filter note-markdown-sticky run tauri dev",
+    "note-client:build": "pnpm --filter note-markdown-client run tauri build",
+    "note-sticky:build": "pnpm --filter note-markdown-sticky run tauri build",
+    "install:fast": "pnpm install --frozen-lockfile --prefer-offline"
   }
 }
