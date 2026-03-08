@@ -159,18 +159,13 @@
   ) => {
     const checklistItems = collectChecklistItems(view.state);
     const sourceItem = checklistItems.find((item) => item.lineFrom === sourceLineFrom);
-    const targetItem = checklistItems.find((item) => item.lineFrom === targetLineFrom);
 
-    if (!sourceItem || !targetItem) {
-      return;
-    }
-
-    if (sourceItem.groupId !== targetItem.groupId) {
+    if (!sourceItem) {
       return;
     }
 
     const sourceLineNumber = sourceItem.lineNumber;
-    const targetLineNumber = targetItem.lineNumber;
+    const targetLineNumber = view.state.doc.lineAt(targetLineFrom).number;
 
     if (sourceLineNumber === targetLineNumber) {
       return;
@@ -307,7 +302,7 @@
     view: EditorView,
     x: number,
     y: number,
-    sourceGroupId: number
+    _sourceGroupId: number
   ) => {
     const pos = view.posAtCoords({ x, y }, false);
     if (pos === null) {
@@ -315,13 +310,8 @@
     }
 
     const line = view.state.doc.lineAt(pos);
-    const targetItem = findChecklistItem(view.state, line.from);
-    if (!targetItem || targetItem.groupId !== sourceGroupId) {
-      return null;
-    }
-
-    const placeAfter = y > lineCenterY(view, targetItem.lineFrom);
-    return { targetLineFrom: targetItem.lineFrom, placeAfter };
+    const placeAfter = y > lineCenterY(view, line.from);
+    return { targetLineFrom: line.from, placeAfter };
   };
 
   const startTaskDrag = (view: EditorView, event: PointerEvent, sourceLineFrom: number) => {
