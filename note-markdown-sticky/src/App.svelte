@@ -526,7 +526,13 @@
       <span>{stickyTitleText(tab)}</span>
     </div>
 
-    <button class="close-action" title="Sluiten" aria-label="Sluiten" on:click={() => void requestClose()}>
+    <button
+      class="close-action"
+      title="Sluiten"
+      aria-label="Sluiten"
+      data-tauri-drag-region="false"
+      on:click={() => void requestClose()}
+    >
       Sluiten
     </button>
   </header>

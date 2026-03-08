@@ -50,7 +50,7 @@
   });
 </script>
 
-<div class="menu-shell">
+<div class="menu-shell" data-tauri-drag-region="false" on:pointerdown|stopPropagation>
   <button
     bind:this={menuButtonElement}
     class="menu-trigger"
@@ -59,14 +59,32 @@
     aria-label="Open sticky menu"
     aria-controls={menuId}
     aria-expanded={showMenu}
+    data-tauri-drag-region="false"
     on:click={toggleMenu}
   >
-    Menu
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </svg>
   </button>
 
   {#if showMenu}
-    <div id={menuId} bind:this={menuPanelElement} class="menu-panel" role="menu">
-      <button class="menu-item" role="menuitem" type="button" on:click={() => runMenuAction(onNewSticky)}>
+    <div
+      id={menuId}
+      bind:this={menuPanelElement}
+      class="menu-panel"
+      role="menu"
+      data-tauri-drag-region="false"
+      on:pointerdown|stopPropagation
+    >
+      <button
+        class="menu-item"
+        role="menuitem"
+        type="button"
+        data-tauri-drag-region="false"
+        on:click={() => runMenuAction(onNewSticky)}
+      >
         Nieuwe sticky
       </button>
 
@@ -74,6 +92,7 @@
         class="menu-item"
         role="menuitem"
         type="button"
+        data-tauri-drag-region="false"
         disabled={!canSave}
         aria-disabled={!canSave}
         on:click={() => runMenuAction(onSave)}
@@ -81,7 +100,13 @@
         Opslaan
       </button>
 
-      <button class="menu-item" role="menuitem" type="button" on:click={() => runMenuAction(onSettings)}>
+      <button
+        class="menu-item"
+        role="menuitem"
+        type="button"
+        data-tauri-drag-region="false"
+        on:click={() => runMenuAction(onSettings)}
+      >
         Instellingen
       </button>
     </div>
@@ -93,21 +118,20 @@
     position: relative;
     display: grid;
     align-items: center;
-    z-index: 20;
+    z-index: 30;
   }
 
   .menu-trigger {
+    width: 30px;
     height: 24px;
-    min-width: 58px;
     border: none;
     border-radius: 7px;
     background: transparent;
     color: var(--sticky-action-ink);
     cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    padding: 0 10px;
+    padding: 0;
+    display: grid;
+    place-items: center;
     transition: background-color 120ms ease, transform 120ms ease;
     text-shadow: 0 0 6px rgba(0, 0, 0, 0.18);
   }
@@ -119,6 +143,15 @@
   .menu-trigger:active {
     transform: translateY(1px);
     background: var(--sticky-action-active);
+  }
+
+  .menu-trigger svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 2;
+    stroke-linecap: round;
   }
 
   .menu-panel {
