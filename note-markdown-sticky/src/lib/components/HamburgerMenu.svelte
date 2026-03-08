@@ -2,6 +2,7 @@
   export let menuId = "sticky-hamburger-menu";
   export let canSave = false;
   export let onNewSticky: () => void = () => {};
+  export let onOpenMarkdown: () => void = () => {};
   export let onSave: () => void = () => {};
   export let onSettings: () => void = () => {};
 
@@ -46,6 +47,10 @@
   <div id={menuId} bind:this={menuPanelElement} class="menu-panel" role="menu" popover="auto" on:toggle={syncMenuState}>
     <button class="menu-item" role="menuitem" type="button" on:click={() => runMenuAction(onNewSticky)}>
       Nieuwe sticky
+    </button>
+
+    <button class="menu-item" role="menuitem" type="button" on:click={() => runMenuAction(onOpenMarkdown)}>
+      Open markdown
     </button>
 
     <button

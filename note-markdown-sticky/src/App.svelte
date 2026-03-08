@@ -8,6 +8,7 @@
     closeTab,
     listRestoreSession,
     newNote,
+    openFile,
     persistSession,
     saveTab,
     saveTabAs,
@@ -295,6 +296,29 @@
     }
   };
 
+  const openMarkdownInSticky = async () => {
+    if (tab?.is_dirty) {
+      const wantsToSave = confirm("Wil je eerst opslaan voordat je een nieuw bestand opent?");
+      if (wantsToSave) {
+        await saveSticky();
+      }
+    }
+
+    clearError();
+    const outcome = await runAction(() => openFile());
+    if (outcome.error) {
+      setError(outcome.error);
+      return;
+    }
+
+    const newTab = outcome.result;
+    if (!newTab) return;
+
+    tab = newTab;
+    applyStyleState(newTab.tab_id);
+    applyEditorZoomState(newTab.tab_id);
+  };
+
   const copyMarkdown = async () => {
     if (!tab || tab.content.length === 0) return;
     clearError();
@@ -518,6 +542,7 @@
       menuId={ACTIONS_MENU_ID}
       canSave={!!tab}
       onNewSticky={() => void createSticky()}
+      onOpenMarkdown={() => void openMarkdownInSticky()}
       onSave={() => void saveSticky()}
       onSettings={openSettings}
     />
