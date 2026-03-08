@@ -657,14 +657,6 @@
     createEditor();
   });
 
-  $: if (currentSessionId !== "" && currentSessionId !== sessionId) {
-    if (pendingChangeTimeout) {
-      clearTimeout(pendingChangeTimeout);
-      pendingChangeTimeout = null;
-    }
-    currentSessionId = sessionId;
-  }
-
   $: if (editorView && content !== editorView.state.doc.toString()) {
     const sel = editorView.state.selection.main.head;
     editorView.dispatch({

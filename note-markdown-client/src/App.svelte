@@ -313,11 +313,13 @@
 
   <section class="editor" style="--editor-font-size: {editorFontSize}px">
     {#if currentActiveTab}
-      <MarkdownEditor
-        sessionId={currentActiveTab.tab_id}
-        content={currentActiveTab.content}
-        onChange={(sessionId, value, cursor) => syncTabContent(sessionId, value, cursor)}
-      />
+      {#key currentActiveTab.tab_id}
+        <MarkdownEditor
+          sessionId={currentActiveTab.tab_id}
+          content={currentActiveTab.content}
+          onChange={(sessionId, value, cursor) => syncTabContent(sessionId, value, cursor)}
+        />
+      {/key}
     {:else}
       <div class="empty">Geen tab geopend</div>
     {/if}

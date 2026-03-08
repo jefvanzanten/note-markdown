@@ -556,7 +556,9 @@
 
   <section class="editor-shell" style="--editor-font-size: {editorFontSize}px">
     {#if tab}
-      <MarkdownEditor sessionId={tab.tab_id} content={tab.content} onChange={(sessionId, value, cursor) => void syncTabContent(value, cursor)} />
+      {#key tab.tab_id}
+        <MarkdownEditor sessionId={tab.tab_id} content={tab.content} onChange={(sessionId, value, cursor) => void syncTabContent(value, cursor)} />
+      {/key}
     {:else}
       <div class="empty">Sticky laden...</div>
     {/if}
