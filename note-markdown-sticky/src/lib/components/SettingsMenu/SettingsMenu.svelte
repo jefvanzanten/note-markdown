@@ -37,7 +37,7 @@
   .settings-popover {
     position: fixed;
     top: 42px;
-    right: 8px;
+    left: 8px;
     z-index: 10;
     min-width: 190px;
     padding: 10px;
@@ -54,16 +54,6 @@
     grid-template-columns: 42px minmax(0, 1fr);
     gap: 10px;
     align-items: center;
-  }
-
-  @supports (position-anchor: --sticky-settings-anchor) and (top: anchor(bottom)) {
-    .settings-popover {
-      position-anchor: --sticky-settings-anchor;
-      top: calc(anchor(bottom) + 8px);
-      left: anchor(right);
-      right: auto;
-      transform: translateX(-100%);
-    }
   }
 
   .color-picker {

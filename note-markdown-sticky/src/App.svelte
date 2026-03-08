@@ -27,6 +27,7 @@
     saveWithFallback,
     toDirectory
   } from "@note/shared-utils";
+  import HamburgerMenu from "./lib/components/HamburgerMenu.svelte";
   import SettingsMenu from "./lib/components/SettingsMenu/SettingsMenu.svelte";
   import { deriveStickyTheme, normalizeHexColor } from "./lib/utils/colorSystem";
   import {
@@ -46,6 +47,7 @@
   const STICKY_MIN_WIDTH = 300;
   const STICKY_MIN_HEIGHT = 260;
   const SETTINGS_MENU_ID = "sticky-settings-menu";
+  const ACTIONS_MENU_ID = "sticky-actions-menu";
   const STICKY_EDITOR_ZOOM_STORAGE_KEY = "note-markdown-sticky-editor-zoom-v1";
 
   let tab: TabDto | null = null;
@@ -54,7 +56,6 @@
   let showSettings = false;
   let stickyColor = DEFAULT_STICKY_COLOR;
   let stickyOpacity = DEFAULT_STICKY_OPACITY;
-  let settingsButtonElement: HTMLButtonElement | null = null;
   let settingsPanelElement: HTMLDivElement | null = null;
   let errorMessage: string | null = null;
   let theme = deriveStickyTheme(stickyColor);
@@ -75,8 +76,8 @@
     showSettings = false;
   };
 
-  const toggleSettings = () => {
-    showSettings = !showSettings;
+  const openSettings = () => {
+    showSettings = true;
   };
 
   const preferredWindowSize = () =>
@@ -390,7 +391,7 @@
     if (!showSettings || event.button !== 0) return;
     const target = event.target as Node | null;
     if (!target) return;
-    if (settingsPanelElement?.contains(target) || settingsButtonElement?.contains(target)) {
+    if (settingsPanelElement?.contains(target)) {
       return;
     }
     closeSettings();
@@ -513,44 +514,21 @@
   "
 >
   <header class="toolbar">
+    <HamburgerMenu
+      menuId={ACTIONS_MENU_ID}
+      canSave={!!tab}
+      onNewSticky={() => void createSticky()}
+      onSave={() => void saveSticky()}
+      onSettings={openSettings}
+    />
+
     <div class="drag-strip" data-tauri-drag-region>
       <span>{stickyTitleText(tab)}</span>
     </div>
 
-    <div class="actions">
-      <button class="action" title="Nieuwe sticky" aria-label="Nieuwe sticky" on:click={() => void createSticky()}>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </button>
-      <button class="action" title="Opslaan" aria-label="Opslaan" disabled={!tab} on:click={() => void saveSticky()}>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 4h13l3 3v13H4z" />
-          <path d="M8 4v7h8V4" />
-          <path d="M8 20v-6h8v6" />
-        </svg>
-      </button>
-      <button
-        bind:this={settingsButtonElement}
-        class="action settings"
-        title="Instellingen"
-        aria-controls={SETTINGS_MENU_ID}
-        aria-expanded={showSettings}
-        on:click={toggleSettings}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M19.14 12.94a7.7 7.7 0 0 0 .05-.94 7.7 7.7 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.32 7.32 0 0 0-1.63-.94l-.36-2.54a.49.49 0 0 0-.49-.42h-3.84a.49.49 0 0 0-.49.42l-.36 2.54c-.58.23-1.12.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.7 7.7 0 0 0-.05.94 7.7 7.7 0 0 0 .05.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.72 1.63.94l.36 2.54a.49.49 0 0 0 .49.42h3.84a.49.49 0 0 0 .49-.42l.36-2.54c.58-.22 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64z"
-          />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
-      </button>
-      <button class="action close" title="Sluiten" aria-label="Sluiten" on:click={() => void requestClose()}>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M6 6l12 12M18 6L6 18" />
-        </svg>
-      </button>
-    </div>
+    <button class="close-action" title="Sluiten" aria-label="Sluiten" on:click={() => void requestClose()}>
+      Sluiten
+    </button>
   </header>
 
   {#if errorMessage}
@@ -631,9 +609,10 @@
   .toolbar {
     grid-row: 1;
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    padding: 0 6px 0 10px;
+    gap: 4px;
+    padding: 0 8px;
     border-bottom: 1px dashed rgba(56, 45, 20, 0.35);
     background: var(--sticky-toolbar);
     backdrop-filter: blur(2px);
@@ -643,6 +622,7 @@
     align-self: stretch;
     display: flex;
     align-items: center;
+    padding: 0 8px;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -653,53 +633,28 @@
     user-select: none;
   }
 
-  .actions {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .action {
-    width: 28px;
+  .close-action {
     height: 24px;
     border: none;
     border-radius: 7px;
     background: transparent;
     color: var(--sticky-action-ink);
     cursor: pointer;
-    padding: 0;
-    display: grid;
-    place-items: center;
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     transition: background-color 120ms ease, transform 120ms ease;
     text-shadow: 0 0 6px rgba(0, 0, 0, 0.18);
   }
 
-  .action:hover:not(:disabled) {
+  .close-action:hover {
     background: var(--sticky-action-hover);
   }
 
-  .action:active:not(:disabled) {
+  .close-action:active {
     background: var(--sticky-action-active);
     transform: translateY(1px);
-  }
-
-  .action:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  .action svg {
-    width: 15px;
-    height: 15px;
-    fill: none;
-    stroke: currentcolor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .action.settings {
-    anchor-name: --sticky-settings-anchor;
   }
 
   .copy-fab {
@@ -780,15 +735,6 @@
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-  }
-
-  .action.settings svg {
-    transform: rotate(0deg);
-    transition: transform 120ms ease;
-  }
-
-  .action.settings:hover:not(:disabled) svg {
-    transform: rotate(20deg);
   }
 
   .error-banner {
