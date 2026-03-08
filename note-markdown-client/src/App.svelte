@@ -86,7 +86,9 @@
     saveEditorFontSize(CLIENT_EDITOR_ZOOM_STORAGE_KEY, currentActiveTab.tab_id, nextSize);
   };
 
-  const syncTabContent = async (tab: TabDto, content: string, cursor: number) => {
+  const syncTabContent = async (sessionId: string, content: string, cursor: number) => {
+    const tab = currentTabs.find((t) => t.tab_id === sessionId);
+    if (!tab) return;
     if (tab.content === content && tab.cursor === cursor) return;
     upsertTab({ ...tab, content, cursor, is_dirty: true });
     await updateTabContent(tab.tab_id, content, cursor);
@@ -312,8 +314,9 @@
   <section class="editor" style="--editor-font-size: {editorFontSize}px">
     {#if currentActiveTab}
       <MarkdownEditor
+        sessionId={currentActiveTab.tab_id}
         content={currentActiveTab.content}
-        onChange={(value, cursor) => syncTabContent(currentActiveTab, value, cursor)}
+        onChange={(sessionId, value, cursor) => syncTabContent(sessionId, value, cursor)}
       />
     {:else}
       <div class="empty">Geen tab geopend</div>
