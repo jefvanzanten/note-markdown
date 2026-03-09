@@ -10,10 +10,10 @@
     keymap,
   } from "@codemirror/view";
   import type { DecorationSet, ViewUpdate } from "@codemirror/view";
-  import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+  import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
   import { markdown } from "@codemirror/lang-markdown";
   import { tags } from "@lezer/highlight";
-  import { history, historyKeymap, undo, redo } from "@codemirror/commands";
+  import { history, historyKeymap, undo, redo, indentMore, indentLess } from "@codemirror/commands";
 
   export let content = "";
   export let sessionId: string = "";
@@ -523,6 +523,7 @@
         const activeLine = view.hasFocus
           ? view.state.doc.lineAt(view.state.selection.main.head).number
           : -1;
+        const tree = syntaxTree(view.state);
 
         for (let ln = 1; ln <= view.state.doc.lines; ln++) {
           const line = view.state.doc.line(ln);
@@ -564,6 +565,22 @@
                 checklistItem.checkboxFrom + 3,
               ),
             );
+          }
+
+          if (ln !== activeLine) {
+            tree.iterate({
+              from: line.from,
+              to: line.to,
+              enter(node) {
+                if (
+                  node.name === "EmphasisMark" ||
+                  node.name === "CodeMark" ||
+                  node.name === "StrikethroughMark"
+                ) {
+                  decs.push(Decoration.replace({}).range(node.from, node.to));
+                }
+              },
+            });
           }
         }
         return Decoration.set(decs);
@@ -691,6 +708,8 @@
             { key: "Mod-z", run: () => undo(editorView!) },
             { key: "Mod-y", run: () => redo(editorView!) },
             { key: "Shift-Mod-z", run: () => redo(editorView!) },
+            { key: "Tab", run: indentMore },
+            { key: "Shift-Tab", run: indentLess },
           ]),
           EditorView.lineWrapping,
           EditorView.updateListener.of((update) => {
