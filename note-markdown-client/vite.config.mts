@@ -19,15 +19,6 @@ export default defineConfig(({ mode }) => {
           }
         : undefined
     },
-    build: {
-      rollupOptions: {
-        external: (id) => {
-          // External all @tauri-apps imports during build
-          // They will be available at runtime in the Tauri webview
-          return id.startsWith('@tauri-apps/');
-        }
-      }
-    },
     server: {
       strictPort: true,
       port: 1420

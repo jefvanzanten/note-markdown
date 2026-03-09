@@ -237,7 +237,13 @@ impl AppService {
         }
 
         let raw = self.fs.read_to_string(&session_path)?;
-        let persisted: PersistedSession = serde_json::from_str(&raw)?;
+        let persisted: PersistedSession = match serde_json::from_str(&raw) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("[note] session.json parse error, starting fresh: {e}");
+                return Ok(());
+            }
+        };
 
         self.next_tab_id = persisted.next_tab_id;
         self.next_temp_id = persisted.next_temp_id;
