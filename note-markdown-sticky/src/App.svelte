@@ -805,6 +805,8 @@
 
   .editor-shell :global(.cm-content) {
     min-height: 100%;
+    min-width: 100%;
+    box-sizing: border-box;
     padding: 14px 0 56px;
     color: var(--sticky-ink);
     caret-color: var(--sticky-caret);

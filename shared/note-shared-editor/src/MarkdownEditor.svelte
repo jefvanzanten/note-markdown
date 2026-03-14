@@ -144,16 +144,28 @@
   };
 
   const lineCenterY = (view: EditorView, pos: number) => {
-    const block = view.lineBlockAt(pos);
-    return view.documentTop + block.top + block.height / 2;
+    const coords = view.coordsAtPos(pos);
+    if (coords) {
+      return (coords.top + coords.bottom) / 2;
+    }
+
+    const scrollerRect = view.scrollDOM.getBoundingClientRect();
+    return scrollerRect.top + scrollerRect.height / 2;
   };
 
   const textVerticalBounds = (view: EditorView) => {
-    const first = view.lineBlockAt(0);
-    const last = view.lineBlockAt(view.state.doc.length);
-    const top = view.documentTop + first.top;
-    const bottom = view.documentTop + last.bottom;
-    return { top, bottom };
+    const scrollerRect = view.scrollDOM.getBoundingClientRect();
+    const first = view.coordsAtPos(0);
+    const last = view.coordsAtPos(view.state.doc.length);
+
+    if (!first || !last) {
+      return { top: scrollerRect.top, bottom: scrollerRect.bottom };
+    }
+
+    return {
+      top: Math.max(scrollerRect.top, first.top),
+      bottom: Math.min(scrollerRect.bottom, last.bottom),
+    };
   };
 
   const moveTaskLine = (
