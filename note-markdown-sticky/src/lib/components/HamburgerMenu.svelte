@@ -26,6 +26,7 @@
 </script>
 
 <div class="menu-shell">
+  <!-- Hamburger icon -->
   <button
     class="menu-trigger"
     type="button"
@@ -44,12 +45,30 @@
     </svg>
   </button>
 
-  <div id={menuId} bind:this={menuPanelElement} class="menu-panel" role="menu" popover="auto" on:toggle={syncMenuState}>
-    <button class="menu-item" role="menuitem" type="button" on:click={() => runMenuAction(onNewSticky)}>
+  <!-- Submenu -->
+  <div
+    id={menuId}
+    bind:this={menuPanelElement}
+    class="menu-panel"
+    role="menu"
+    popover="auto"
+    on:toggle={syncMenuState}
+  >
+    <button
+      class="menu-item"
+      role="menuitem"
+      type="button"
+      on:click={() => runMenuAction(onNewSticky)}
+    >
       Nieuwe sticky
     </button>
 
-    <button class="menu-item" role="menuitem" type="button" on:click={() => runMenuAction(onOpenMarkdown)}>
+    <button
+      class="menu-item"
+      role="menuitem"
+      type="button"
+      on:click={() => runMenuAction(onOpenMarkdown)}
+    >
       Open markdown
     </button>
 
@@ -64,7 +83,12 @@
       Opslaan
     </button>
 
-    <button class="menu-item" role="menuitem" type="button" on:click={() => runMenuAction(onSettings)}>
+    <button
+      class="menu-item"
+      role="menuitem"
+      type="button"
+      on:click={() => runMenuAction(onSettings)}
+    >
       Instellingen
     </button>
   </div>
@@ -90,7 +114,9 @@
     padding: 0;
     display: grid;
     place-items: center;
-    transition: background-color 120ms ease, transform 120ms ease;
+    transition:
+      background-color 120ms ease,
+      transform 120ms ease;
     text-shadow: 0 0 6px rgba(0, 0, 0, 0.18);
   }
 
@@ -121,10 +147,12 @@
     z-index: 60;
     min-width: 170px;
     padding: 6px;
-    border: 1px solid color-mix(in srgb, var(--sticky-action-active) 76%, #fff 24%);
+    border: 1px solid
+      color-mix(in srgb, var(--sticky-action-active) 76%, #fff 24%);
     border-radius: 10px;
     background: color-mix(in srgb, var(--sticky-toolbar) 90%, #fff 10%);
-    box-shadow: 0 10px 20px color-mix(in srgb, var(--sticky-shadow) 60%, #000 40%);
+    box-shadow: 0 10px 20px
+      color-mix(in srgb, var(--sticky-shadow) 60%, #000 40%);
     display: grid;
     gap: 4px;
   }

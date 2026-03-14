@@ -685,6 +685,57 @@
     }, 300);
   };
 
+  const toggleFormatting = (view: EditorView, prefix: string, suffix: string): boolean => {
+    const { from, to } = view.state.selection.main;
+    const doc = view.state.doc;
+
+    if (from === to) {
+      view.dispatch({
+        changes: { from, to, insert: prefix + suffix },
+        selection: { anchor: from + prefix.length },
+      });
+      return true;
+    }
+
+    const selectedText = doc.sliceString(from, to);
+
+    const preStart = Math.max(0, from - prefix.length);
+    const postEnd = Math.min(doc.length, to + suffix.length);
+    const beforeText = doc.sliceString(preStart, from);
+    const afterText = doc.sliceString(to, postEnd);
+
+    if (beforeText === prefix && afterText === suffix) {
+      view.dispatch({
+        changes: [
+          { from: preStart, to: from, insert: "" },
+          { from: to, to: postEnd, insert: "" },
+        ],
+        selection: { anchor: preStart, head: preStart + selectedText.length },
+      });
+      return true;
+    }
+
+    if (selectedText.startsWith(prefix) && selectedText.endsWith(suffix)) {
+      const inner = selectedText.slice(prefix.length, selectedText.length - suffix.length);
+      view.dispatch({
+        changes: { from, to, insert: inner },
+        selection: { anchor: from, head: from + inner.length },
+      });
+      return true;
+    }
+
+    view.dispatch({
+      changes: { from, to, insert: prefix + selectedText + suffix },
+      selection: { anchor: from + prefix.length, head: from + prefix.length + selectedText.length },
+    });
+    return true;
+  };
+
+  const toggleBold = (view: EditorView): boolean => toggleFormatting(view, "**", "**");
+  const toggleItalic = (view: EditorView): boolean => toggleFormatting(view, "*", "*");
+  const toggleUnderline = (view: EditorView): boolean => toggleFormatting(view, "<u>", "</u>");
+  const toggleStrikethrough = (view: EditorView): boolean => toggleFormatting(view, "~~", "~~");
+
   const createEditor = () => {
     editorView = new EditorView({
       state: EditorState.create({
@@ -710,6 +761,10 @@
             { key: "Shift-Mod-z", run: () => redo(editorView!) },
             { key: "Tab", run: indentMore },
             { key: "Shift-Tab", run: indentLess },
+            { key: "Alt-b", run: toggleBold },
+            { key: "Alt-i", run: toggleItalic },
+            { key: "Alt-u", run: toggleUnderline },
+            { key: "Alt-s", run: toggleStrikethrough },
           ]),
           EditorView.lineWrapping,
           EditorView.updateListener.of((update) => {
@@ -814,7 +869,8 @@
   }
 
   :global(.md-strong) {
-    font-weight: 700;
+    font-weight: 900;
+    color: #f1f5f9;
   }
 
   :global(.md-em) {
