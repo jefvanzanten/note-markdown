@@ -41,6 +41,7 @@
   ]);
 
   const checklistPattern = /^(\s*)([-*+] )\[([ xX])\]/;
+  const bulletListPattern = /^(\s*)([-*+] )(?!\[)/;  // Match bullet but NOT if followed by [
   const editorSidePaddingPx = 16;
 
   type ParsedChecklistLine = {
@@ -50,12 +51,27 @@
     text: string;
   };
 
+  type ParsedBulletListLine = {
+    indent: string;
+    bullet: string;
+    text: string;
+  };
+
   type ChecklistItem = {
     lineNumber: number;
     lineFrom: number;
     handleFrom: number;
     checkboxFrom: number;
     checked: boolean;
+    groupId: number;
+  };
+
+  type BulletListItem = {
+    lineNumber: number;
+    lineFrom: number;
+    handleFrom: number;
+    bulletFrom: number;
+    bullet: string;
     groupId: number;
   };
 
@@ -84,6 +100,19 @@
       indent: match[1],
       bullet: match[2],
       checked: match[3].toLowerCase() === "x",
+      text: lineText.slice(match[0].length),
+    };
+  };
+
+  const parseBulletListLine = (lineText: string): ParsedBulletListLine | null => {
+    const match = lineText.match(bulletListPattern);
+    if (!match) {
+      return null;
+    }
+
+    return {
+      indent: match[1],
+      bullet: match[2],
       text: lineText.slice(match[0].length),
     };
   };
@@ -123,8 +152,47 @@
     return items;
   };
 
+  const collectBulletListItems = (state: EditorState): BulletListItem[] => {
+    const items: BulletListItem[] = [];
+    let groupId = -1;
+    let previousWasBulletList = false;
+
+    for (let ln = 1; ln <= state.doc.lines; ln++) {
+      const line = state.doc.line(ln);
+      const parsed = parseBulletListLine(line.text);
+
+      if (!parsed) {
+        previousWasBulletList = false;
+        continue;
+      }
+
+      if (!previousWasBulletList) {
+        groupId += 1;
+      }
+      previousWasBulletList = true;
+
+      const handleFrom = line.from + parsed.indent.length;
+      const bulletFrom = handleFrom;
+
+      items.push({
+        lineNumber: ln,
+        lineFrom: line.from,
+        handleFrom,
+        bulletFrom,
+        bullet: parsed.bullet,
+        groupId,
+      });
+    }
+
+    return items;
+  };
+
   const findChecklistItem = (state: EditorState, lineFrom: number) =>
     collectChecklistItems(state).find((item) => item.lineFrom === lineFrom) ??
+    null;
+
+  const findBulletListItem = (state: EditorState, lineFrom: number) =>
+    collectBulletListItems(state).find((item) => item.lineFrom === lineFrom) ??
     null;
 
   const collectDocLines = (state: EditorState) => {
@@ -175,9 +243,14 @@
     placeAfter: boolean,
   ) => {
     const checklistItems = collectChecklistItems(view.state);
-    const sourceItem = checklistItems.find(
+    const bulletListItems = collectBulletListItems(view.state);
+    const checklistItem = checklistItems.find(
       (item) => item.lineFrom === sourceLineFrom,
     );
+    const bulletListItem = bulletListItems.find(
+      (item) => item.lineFrom === sourceLineFrom,
+    );
+    const sourceItem = checklistItem || bulletListItem;
 
     if (!sourceItem) {
       return;
@@ -256,29 +329,44 @@
     removeTaskDragGhost();
 
     const line = view.state.doc.lineAt(sourceLineFrom);
-    const parsed = parseChecklistLine(line.text);
-    if (!parsed) {
+    const checklistParsed = parseChecklistLine(line.text);
+    const bulletListParsed = parseBulletListLine(line.text);
+
+    if (!checklistParsed && !bulletListParsed) {
       return;
     }
 
     const ghost = document.createElement("div");
     ghost.className = "cm-task-drag-ghost";
 
-    const bullet = document.createElement("span");
-    bullet.className = "cm-task-drag-bullet";
-    bullet.textContent = parsed.bullet.trim();
+    if (checklistParsed) {
+      const bullet = document.createElement("span");
+      bullet.className = "cm-task-drag-bullet";
+      bullet.textContent = checklistParsed.bullet.trim();
 
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.className = "cm-checkbox";
-    checkbox.checked = parsed.checked;
-    checkbox.disabled = true;
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "cm-checkbox";
+      checkbox.checked = checklistParsed.checked;
+      checkbox.disabled = true;
 
-    const text = document.createElement("span");
-    text.className = "cm-task-drag-text";
-    text.textContent = parsed.text || " ";
+      const text = document.createElement("span");
+      text.className = "cm-task-drag-text";
+      text.textContent = checklistParsed.text || " ";
 
-    ghost.append(bullet, checkbox, text);
+      ghost.append(bullet, checkbox, text);
+    } else if (bulletListParsed) {
+      const bullet = document.createElement("span");
+      bullet.className = "cm-task-drag-bullet";
+      bullet.textContent = bulletListParsed.bullet.trim();
+
+      const text = document.createElement("span");
+      text.className = "cm-task-drag-text";
+      text.textContent = bulletListParsed.text || " ";
+
+      ghost.append(bullet, text);
+    }
+
     document.body.append(ghost);
     taskDragGhostEl = ghost;
   };
@@ -349,7 +437,10 @@
       return;
     }
 
-    const sourceItem = findChecklistItem(view.state, sourceLineFrom);
+    const checklistItem = findChecklistItem(view.state, sourceLineFrom);
+    const bulletListItem = findBulletListItem(view.state, sourceLineFrom);
+    const sourceItem = checklistItem || bulletListItem;
+
     if (!sourceItem) {
       return;
     }
@@ -505,6 +596,51 @@
     }
   }
 
+  class BulletWidget extends WidgetType {
+    bullet: string;
+    lineFrom: number;
+
+    constructor(bullet: string, lineFrom: number) {
+      super();
+      this.bullet = bullet;
+      this.lineFrom = lineFrom;
+    }
+
+    toDOM(view: EditorView): HTMLElement {
+      const container = document.createElement("span");
+      container.className = "cm-bullet-container";
+
+      // Add drag handle
+      const handle = document.createElement("button");
+      handle.type = "button";
+      handle.className = "cm-task-handle";
+      handle.tabIndex = -1;
+      handle.title = "Sleep om lijst-item te verplaatsen";
+      handle.setAttribute("aria-label", "Sleep om lijst-item te verplaatsen");
+      handle.addEventListener("pointerdown", (event) => {
+        startTaskDrag(view, event, this.lineFrom);
+      });
+
+      // Add bullet
+      const bulletSpan = document.createElement("span");
+      bulletSpan.className = "cm-bullet-text";
+      bulletSpan.textContent = this.bullet;
+
+      container.appendChild(handle);
+      container.appendChild(bulletSpan);
+
+      return container;
+    }
+
+    eq(other: BulletWidget): boolean {
+      return other.bullet === this.bullet && other.lineFrom === this.lineFrom;
+    }
+
+    ignoreEvent(): boolean {
+      return true;
+    }
+  }
+
   const mdPlugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
@@ -528,6 +664,12 @@
         const decs: Range<Decoration>[] = [];
         const checklistByLine = new Map(
           collectChecklistItems(view.state).map((item) => [
+            item.lineFrom,
+            item,
+          ]),
+        );
+        const bulletListByLine = new Map(
+          collectBulletListItems(view.state).map((item) => [
             item.lineFrom,
             item,
           ]),
@@ -575,6 +717,22 @@
               }).range(
                 checklistItem.checkboxFrom,
                 checklistItem.checkboxFrom + 3,
+              ),
+            );
+          }
+
+          const bulletListItem = bulletListByLine.get(line.from);
+          if (bulletListItem) {
+            // Replace the bullet "- " with a widget containing handle + bullet
+            decs.push(
+              Decoration.replace({
+                widget: new BulletWidget(
+                  bulletListItem.bullet,
+                  bulletListItem.lineFrom,
+                ),
+              }).range(
+                bulletListItem.bulletFrom,
+                bulletListItem.bulletFrom + bulletListItem.bullet.length,
               ),
             );
           }
@@ -944,6 +1102,13 @@
     flex: 0 0 auto;
   }
 
+  :global(.cm-task-drag-number) {
+    color: #94a3b8;
+    font-weight: 700;
+    flex: 0 0 auto;
+    margin-right: 4px;
+  }
+
   :global(.cm-task-drag-text) {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1014,5 +1179,17 @@
     vertical-align: middle;
     margin-right: 0;
     accent-color: #0284c7;
+  }
+
+  :global(.cm-bullet-container) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  :global(.cm-bullet-text) {
+    color: #94a3b8;
+    font-weight: 700;
+    margin-right: 4px;
   }
 </style>
