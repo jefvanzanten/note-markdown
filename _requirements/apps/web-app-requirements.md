@@ -35,8 +35,16 @@
 ## Bestandenlijst
 - De bestandenlijst toont bestanden en mappen in een boomstructuur
 - Mappen kunnen worden ingeklapt en uitgevouwen
+- De inklap-status van mappen blijft bewaard na het herladen van de pagina
 - Bestanden in een map worden ingesprongen weergegeven
 - Geopende (dirty) bestanden krijgen een indicatie (•) in de bestandenlijst en in de tabbar
+- Het laatst geopende tabblad wordt na een herstart automatisch hersteld
+
+## Workspace-voettekst
+- Onderaan de bestandenlijst wordt de naam van de huidige workspace getoond
+- Als er geen naam is ingesteld, wordt "workspace1" als standaardnaam getoond
+- Er is een knop om een nieuwe workspace te openen
+- De voettekst klapt mee in wanneer de bestandenlijst wordt ingeklapt
 
 ## Opslaan
 - Ctrl+S slaat het actieve bestand op

@@ -67,18 +67,23 @@ grid-template-rows: auto 1fr
 grid-template-columns: 28px var(--sidebar-width, 220px) 1fr
 ```
 - Column 0 (28px fixed): `CollapseToggle` — always visible
-- Column 1 (`--sidebar-width`): `FileList` — collapses to 0 with CSS transition
+- Column 1 (`--sidebar-width`): `FileList` + `WorkspaceFooter` — collapses to 0 with CSS transition
 - Column 2: `TabBar` (row 0) + `MarkdownEditor` (row 1)
+
+The sidebar column uses `display: flex; flex-direction: column` so `FileList` fills remaining space (`flex: 1`) and the workspace footer is pinned to the bottom (`flex-shrink: 0`).
 
 ## Possible Edge Cases
 
 - **Brave browser**: `showDirectoryPicker` removed from `window` by fingerprinting protection → server mode or fallback mode required
 - **Folder collapse reactivity**: Svelte `Set` mutation with same reference does not trigger `$:` reactive statements → always create a new `Set` instance on toggle
+- **Folder collapse persistence timing**: a Svelte `$:` save block runs at component init (before `onMount`) and would overwrite the saved state with an empty set — save only inside `toggleFolder`, load only in `onMount`
+- **CRLF line endings**: CodeMirror 6 normalises `\r\n` → `\n` internally; files read from disk on Windows with CRLF would fail the `tab.content === value` equality check in `syncContent`, causing a false dirty flag — normalise with `content.replace(/\r\n/g, "\n")` when reading
 - **Fallback mode persistence**: `File` objects from `<input webkitdirectory>` cannot be stored in IndexedDB → read all file contents immediately and cache as plain text strings
 - **Path traversal in server mode**: `abs.startsWith(config.path)` check prevents reading files outside the workspace
 - **Permission revoked**: If FSA handle exists in IDB but permission was revoked, re-request with `requestPermission({ mode: 'readwrite' })`
 - **No subfolders**: `/api/list-dirs` returns empty `dirs` array; FolderBrowser shows "No subfolders" message
 - **Non-null assertion in Svelte template**: `listing!.parent!` causes parse errors; use `{@const parent = listing.parent}` inside `{#if listing?.parent}` instead
+- **Last-open-path missing from workspace**: path stored in `last-open-path` may no longer exist if files were deleted or workspace changed — verify with `ws.files.some(f => f.path === lastPath)` before calling `onFileClick`
 
 ## Acceptance Criteria
 
@@ -87,10 +92,12 @@ grid-template-columns: 28px var(--sidebar-width, 220px) 1fr
 - [ ] FolderBrowser overlay is dark-themed and allows navigating directories
 - [ ] After selecting a workspace, FileList shows all `.md` files in a collapsible tree
 - [ ] Clicking a file opens it in a new tab with the MarkdownEditor loaded
-- [ ] Typing marks the tab dirty (• indicator in tab and file list)
+- [ ] Typing marks the tab dirty (• indicator in tab and file list); opening a file does NOT mark it dirty
 - [ ] Ctrl+S saves the file to disk (server/FSA mode) or triggers download (fallback)
-- [ ] Reloading the page reopens the last workspace without going through WorkspacePicker
-- [ ] Sidebar collapse toggle hides FileList; editor expands to fill the width (animated)
+- [ ] Reloading the page reopens the last workspace and the last active tab without going through WorkspacePicker
+- [ ] Folder collapse states are preserved across page reloads, namespaced per workspace
+- [ ] Sidebar collapse toggle hides FileList and workspace footer; editor expands to fill the width (animated)
+- [ ] Workspace footer shows workspace name (default "workspace1") and a button to switch workspace
 - [ ] Recent workspaces list appears in WorkspacePicker after at least one workspace has been opened
 - [ ] App works in Brave, Chrome, Edge, and Firefox (server mode)
 
@@ -108,4 +115,6 @@ Create test files in `./tests` for the following cases:
 - `workspacePersistence`: verify `saveWorkspaceName`/`loadWorkspaceName` round-trip via localStorage mock; verify `loadRecentWorkspaces` returns max N items sorted by recency
 - `fsAccess.buildFallbackEntries`: given a `FileList`-like input, verify correct `FileEntry[]` structure and root name extraction
 - `FileList` tree builder: given flat `FileEntry[]` with nested paths, verify `buildTree` produces correct folder/file hierarchy
+- `FileList` collapse persistence: verify `onMount` restores collapsed state from localStorage; verify `toggleFolder` saves updated state; verify `$:` init does NOT overwrite saved state
 - `FolderBrowser`: verify that clicking a directory item navigates into it; verify Cancel dispatches `cancel` event
+- `restoreLastTab`: verify it opens the correct file after workspace load; verify it does nothing when the stored path is absent from the workspace files
