@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { tabs } from "@note/state";
   import type { FileEntry } from "../../services/fsAccess";
 
   export let files: FileEntry[];
   export let activeFilePath: string | null;
   export let onFileClick: (path: string) => void;
+  export let storageKey = "collapsed-folders";
 
   type FolderNode = { kind: "folder"; name: string; path: string; children: TreeNode[] };
   type FileNode = { kind: "file"; name: string; path: string; entry: FileEntry };
@@ -15,6 +17,13 @@
     | { kind: "file"; name: string; path: string; depth: number; entry: FileEntry };
 
   let collapsedFolders = new Set<string>();
+
+  onMount(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) collapsedFolders = new Set(JSON.parse(saved) as string[]);
+    } catch { /* ignore */ }
+  });
 
   function buildTree(entries: FileEntry[]): TreeNode[] {
     const root: FolderNode = { kind: "folder", name: "", path: "", children: [] };
@@ -64,6 +73,9 @@
       next.add(path);
     }
     collapsedFolders = next;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify([...next]));
+    } catch { /* ignore */ }
   }
 
   $: tree = buildTree(files);

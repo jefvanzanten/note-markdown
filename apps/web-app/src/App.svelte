@@ -43,6 +43,7 @@
   $: currentActiveTab = currentTabs.find((t) => t.tab_id === currentActiveTabId) ?? null;
   $: activeFilePath = currentActiveTab?.linked_path ?? null;
   $: wsMode = $workspaceState.status === "ready" ? $workspaceState.mode : null;
+  $: if (activeFilePath) localStorage.setItem("last-open-path", activeFilePath);
 
   onMount(async () => {
     // Priority 1: Vite dev server API (works in any browser, full read/write)
@@ -108,6 +109,7 @@
       saveWorkspaceName(name);
       if (config) saveRecentWorkspace(config.path, name);
       status = "ready";
+      await restoreLastTab();
     } catch (e) {
       errorMessage = `Failed to load workspace: ${(e as Error).message}`;
       status = "picking";
@@ -124,6 +126,7 @@
       await saveDirectoryHandle(handle);
       saveWorkspaceName(wsName);
       status = "ready";
+      await restoreLastTab();
     } catch (e) {
       errorMessage = `Failed to load workspace: ${(e as Error).message}`;
       status = "picking";
@@ -149,6 +152,19 @@
     saveWorkspaceName(name);
     workspaceState.set({ status: "ready", name, files: enriched, handleMap: new Map(), mode: "fallback" });
     status = "ready";
+    await restoreLastTab();
+  }
+
+  // --- Restore last open tab after workspace loads ---
+
+  async function restoreLastTab(): Promise<void> {
+    const lastPath = localStorage.getItem("last-open-path");
+    if (!lastPath) return;
+    const ws = $workspaceState;
+    if (ws.status !== "ready") return;
+    if (ws.files.some((f) => f.path === lastPath)) {
+      await onFileClick(lastPath);
+    }
   }
 
   // --- Event handler from WorkspacePicker ---
@@ -188,6 +204,7 @@
       } else {
         content = await readFileEntry(fileEntry);
       }
+      content = content.replace(/\r\n/g, "\n");
       const tab: TabDto = {
         tab_id: crypto.randomUUID(),
         title: fileEntry.name,
@@ -322,7 +339,20 @@
     <!-- Content row -->
     <div class="sidebar-spacer"></div>
     <div class="sidebar">
-      <FileList files={$workspaceFiles} {activeFilePath} {onFileClick} />
+      <div class="sidebar-files">
+        <FileList files={$workspaceFiles} {activeFilePath} {onFileClick} storageKey="collapsed-{$workspaceName ?? 'default'}" />
+      </div>
+      <div class="workspace-footer">
+        <svg class="ws-footer-icon" width="13" height="13" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1 3.5C1 2.67 1.67 2 2.5 2H5.5L7 3.5H11.5C12.33 3.5 13 4.17 13 5V10.5C13 11.33 12.33 12 11.5 12H2.5C1.67 12 1 11.33 1 10.5V3.5Z" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        </svg>
+        <span class="ws-footer-name" title={$workspaceName ?? "workspace1"}>{$workspaceName ?? "workspace1"}</span>
+        <button class="ws-footer-btn" on:click={() => (status = "picking")} title="Open workspace">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6.5 2V11M2 6.5H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div class="editor-pane">
       {#if wsMode === "fallback"}
@@ -438,7 +468,38 @@
     grid-row: 2; grid-column: 2;
     background: var(--surface); border-right: 1px solid var(--border);
     overflow: hidden; min-width: 0;
+    display: flex; flex-direction: column;
   }
+
+  .sidebar-files {
+    flex: 1; overflow: hidden; min-height: 0;
+  }
+
+  .workspace-footer {
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    padding: 6px 8px;
+    display: flex; align-items: center; gap: 5px;
+  }
+
+  .ws-footer-icon {
+    flex-shrink: 0; color: #c8a560;
+  }
+
+  .ws-footer-name {
+    flex: 1; min-width: 0;
+    font-size: 0.75rem; color: var(--text-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .ws-footer-btn {
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px;
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); border-radius: 3px; padding: 0;
+  }
+  .ws-footer-btn:hover { background: var(--hover); color: var(--text); }
 
   .editor-pane {
     grid-row: 2; grid-column: 3;
