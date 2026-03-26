@@ -444,6 +444,7 @@
     grid-row: 2; grid-column: 3;
     overflow: hidden; display: flex; flex-direction: column;
     min-width: 0; background: var(--bg);
+    padding: 1rem;
   }
 
   .empty-editor {
