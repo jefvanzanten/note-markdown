@@ -4,3 +4,4 @@
 **/dist
 **/.svelte-kit
 **/.DS_Store
+apps/web-app/.workspace.json

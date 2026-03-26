@@ -1,7 +1,6 @@
 packages:
-  - note-markdown-client
-  - note-markdown-sticky
-  - shared/*
+  - apps/*
+  - packages/*
 
 onlyBuiltDependencies:
   - esbuild

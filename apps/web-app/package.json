@@ -1,0 +1,30 @@
+{
+  "name": "web-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^3.1.2",
+    "@tsconfig/svelte": "^5.0.4",
+    "@types/node": ">=20",
+    "@types/wicg-file-system-access": "^2023.10.5",
+    "svelte": "^4.2.18",
+    "svelte-check": "^3.8.6",
+    "tslib": "^2.6.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.8"
+  },
+  "dependencies": {
+    "@note/editor": "workspace:*",
+    "@note/state": "workspace:*",
+    "@note/types": "workspace:*",
+    "@note/utils": "workspace:*",
+    "idb-keyval": "^6.2.1"
+  }
+}

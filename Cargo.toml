@@ -3,6 +3,6 @@ resolver = "2"
 members = [
     "shared/note-core",
     "shared/note-tauri-commands",
-    "note-markdown-client/src-tauri",
-    "note-markdown-sticky/src-tauri",
+    "apps/note-markdown-client/src-tauri",
+    "apps/note-markdown-sticky/src-tauri",
 ]
