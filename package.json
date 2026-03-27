@@ -12,6 +12,8 @@
     "note-sticky:build": "pnpm --filter note-markdown-sticky run tauri build",
     "web-app:dev": "pnpm --filter web-app run dev",
     "web-app:build": "pnpm --filter web-app run build",
+    "note-web-tray:dev": "pnpm --filter note-web-tray run tauri dev",
+    "note-web-tray:build": "pnpm --filter note-web-tray run tauri build",
     "install:fast": "pnpm install --frozen-lockfile --prefer-offline"
   }
 }

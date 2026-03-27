@@ -5,4 +5,5 @@ members = [
     "shared/note-tauri-commands",
     "apps/note-markdown-client/src-tauri",
     "apps/note-markdown-sticky/src-tauri",
+    "apps/note-web-tray/src-tauri",
 ]

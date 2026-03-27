@@ -1,8 +1,14 @@
 # Functional Requirements
 
 ## Tray applicatie
-- De applicatie start als tray app
-- De applicatie is een runnable en hoeft niet met npm gestart te worden
+- De applicatie start als tray app (`note-web-tray`)
+- De applicatie is een standalone binary en hoeft niet met pnpm of Node.js te worden gestart
+- De tray app is een Tauri 2 applicatie zonder venster die een embedded Axum HTTP server opstart op `localhost:1422`
+- De embedded server serveert de web-app (statische bestanden) én de REST API (`/api/*`)
+- De statische bestanden van de web-app zijn op compile-tijd ingebakken in de binary via `rust-embed`
+- Links klikken op het tray-icoon opent `http://localhost:1422` in de standaardbrowser
+- Het tray-menu biedt "Open in browser" en "Quit"
+- De workspace-configuratie wordt opgeslagen in de app data directory van het besturingssysteem
 
 ## Workspaces
 - Het systeem laadt de laatst geladen workspace by default
@@ -13,7 +19,7 @@
 
 ## Browser ondersteuning
 - Het systeem werkt in elke moderne browser (ook Brave, Firefox)
-- In server-modus leest en schrijft de applicatie bestanden via een lokale Vite-API (Node.js bestandstoegang)
+- In server-modus leest en schrijft de applicatie bestanden via een lokale REST API op `localhost:1422`; in development via de Vite middleware (`fileSystemPlugin`), in productie via de embedded Axum server in de tray app
 - In FSA-modus (Chrome/Edge) gebruikt het systeem de Web File System Access API
 - In fallback-modus (overige browsers zonder FSA) worden bestanden gelezen via een `<input webkitdirectory>`; wijzigingen worden opgeslagen als download
 

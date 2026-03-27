@@ -6,7 +6,7 @@ branch: feature/web-app
 
 A browser-based markdown workspace editor built with Svelte + Vite. The app runs as a standalone tray application (no npm required for end users) and supports three file-access modes depending on the browser:
 
-1. **Server mode** — Vite dev server (or packaged server) exposes a local REST API over Node.js. Works in any browser with full read/write access. Workspace path is stored in `.workspace.json`.
+1. **Server mode** — A local REST API on `localhost:1422` provides full read/write file access. In development this is the Vite dev server middleware (`fileSystemPlugin`); in production this is the embedded Axum server inside the `note-web-tray` Tauri binary. Works in any browser.
 2. **FSA mode** — Uses the Web File System Access API (`showDirectoryPicker`). Works in Chrome/Edge. Handle is persisted in IndexedDB.
 3. **Fallback mode** — Uses `<input webkitdirectory>` to load files. Read-only with download-on-save. File contents cached in IndexedDB.
 
@@ -17,6 +17,8 @@ The functional requirements can be found at `_requirements/apps/web-app-requirem
 ## Architecture
 
 ### Directory structure
+
+**web-app** (Svelte frontend, werkt in elke browser):
 ```
 apps/web-app/
 ├── index.html
@@ -25,7 +27,7 @@ apps/web-app/
 ├── svelte.config.js
 ├── tsconfig.json
 ├── src-vite/
-│   └── fileSystemPlugin.ts     # Vite plugin: REST API middleware
+│   └── fileSystemPlugin.ts     # Vite plugin: REST API middleware (dev only)
 └── src/
     ├── main.ts
     ├── ambient.d.ts             # webkitdirectory type augmentation
@@ -44,6 +46,31 @@ apps/web-app/
             ├── TabBar.svelte            # Horizontal tab strip
             └── CollapseToggle.svelte    # Sidebar collapse button
 ```
+
+**note-web-tray** (Tauri tray binary, vervangt pnpm run voor eindgebruikers):
+```
+apps/note-web-tray/
+├── package.json                 # @tauri-apps/cli devDependency
+└── src-tauri/
+    ├── Cargo.toml               # tauri, axum, rust-embed, open, mime_guess
+    ├── build.rs
+    ├── tauri.conf.json          # geen venster; beforeBuildCommand bouwt web-app
+    ├── icons/
+    ├── capabilities/
+    │   └── default.json
+    └── src/
+        ├── main.rs
+        ├── lib.rs               # tray setup + server starten + browser openen
+        └── server.rs            # Axum HTTP server: statische bestanden + REST API
+```
+
+**Samenwerking dev vs productie:**
+| | Dev (`pnpm web-app:dev`) | Productie (`note-web-tray`) |
+|---|---|---|
+| Frontend serveren | Vite dev server | rust-embed in Axum |
+| REST API | `fileSystemPlugin` middleware | Axum route handlers in `server.rs` |
+| Workspace config | `.workspace.json` in CWD | app data dir van OS |
+| Browser openen | Handmatig naar `localhost:1422` | Tray-icoon klik |
 
 ### REST API (server mode)
 | Endpoint | Method | Description |
@@ -87,7 +114,10 @@ The sidebar column uses `display: flex; flex-direction: column` so `FileList` fi
 
 ## Acceptance Criteria
 
-- [ ] App loads at `http://localhost:1422` (dev) or via packaged tray binary
+- [ ] App loads at `http://localhost:1422` in development (`pnpm web-app:dev`) en via de `note-web-tray` binary
+- [ ] `note-web-tray` binary start zonder Node.js of pnpm; tray-icoon verschijnt in de systeembalk
+- [ ] Links klikken op het tray-icoon opent `http://localhost:1422` in de standaardbrowser
+- [ ] Tray-menu toont "Open in browser" en "Quit"; Quit sluit de server en de app
 - [ ] First launch: WorkspacePicker shown; server mode shows path input + Browse button + recent workspaces list
 - [ ] FolderBrowser overlay is dark-themed and allows navigating directories
 - [ ] After selecting a workspace, FileList shows all `.md` files in a collapsible tree
@@ -103,13 +133,11 @@ The sidebar column uses `display: flex; flex-direction: column` so `FileList` fi
 
 ## Open Questions
 
-- How should the tray app be packaged? Options: Tauri tray app (wraps the Vite build), Electron, or a lightweight Node.js HTTP server bundled as a single executable.
-- Should the tray app bundle its own server, or rely on a separately running Vite/Node process?
 - Should the recent workspaces list have a maximum size (e.g. last 5)?
 
 ## Testing Guidelines
 
-Create test files in `./tests` for the following cases:
+**web-app** — create test files in `apps/web-app/tests/`:
 
 - `fileSystemPlugin` REST API: mock `fs` and verify each endpoint returns correct status codes and JSON shapes
 - `workspacePersistence`: verify `saveWorkspaceName`/`loadWorkspaceName` round-trip via localStorage mock; verify `loadRecentWorkspaces` returns max N items sorted by recency
@@ -118,3 +146,10 @@ Create test files in `./tests` for the following cases:
 - `FileList` collapse persistence: verify `onMount` restores collapsed state from localStorage; verify `toggleFolder` saves updated state; verify `$:` init does NOT overwrite saved state
 - `FolderBrowser`: verify that clicking a directory item navigates into it; verify Cancel dispatches `cancel` event
 - `restoreLastTab`: verify it opens the correct file after workspace load; verify it does nothing when the stored path is absent from the workspace files
+
+**note-web-tray** — Rust integration tests in `apps/note-web-tray/src-tauri/src/`:
+
+- `server::scan_dir`: given a temp directory with nested `.md` files and hidden files, verify correct `FileEntry[]` output (hidden files excluded, sorted)
+- `server::has_traversal`: verify `..` and `.` segments are rejected; normal paths pass
+- REST API routes: spin up the Axum router with a temp config path and verify each endpoint's status code and JSON response shape
+- Path traversal in `get_file` / `put_file`: verify requests with `../` in the path return 403
