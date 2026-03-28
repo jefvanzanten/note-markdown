@@ -10,8 +10,9 @@
     keymap,
   } from "@codemirror/view";
   import type { DecorationSet, ViewUpdate } from "@codemirror/view";
-  import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
+  import { HighlightStyle, LanguageDescription, syntaxHighlighting, syntaxTree } from "@codemirror/language";
   import { markdown } from "@codemirror/lang-markdown";
+  import { javascript } from "@codemirror/lang-javascript";
   import { tags } from "@lezer/highlight";
   import { history, historyKeymap, undo, redo, indentMore, indentLess } from "@codemirror/commands";
 
@@ -38,6 +39,23 @@
     { tag: tags.monospace, class: "md-code" },
     { tag: tags.link, class: "md-link" },
     { tag: tags.url, class: "md-url" },
+    // Code block syntax highlighting tokens
+    { tag: tags.keyword, color: "#c084fc" },
+    { tag: tags.typeName, color: "#fde68a" },
+    { tag: tags.string, color: "#86efac" },
+    { tag: tags.number, color: "#fb923c" },
+    { tag: tags.comment, color: "#475569", fontStyle: "italic" },
+    { tag: tags.lineComment, color: "#475569", fontStyle: "italic" },
+    { tag: tags.blockComment, color: "#475569", fontStyle: "italic" },
+    { tag: tags.operator, color: "#7dd3fc" },
+    { tag: tags.punctuation, color: "#94a3b8" },
+    { tag: tags.propertyName, color: "#f9a8d4" },
+    { tag: tags.variableName, color: "#e2e8f0" },
+    { tag: tags.function(tags.variableName), color: "#93c5fd" },
+    { tag: tags.className, color: "#fde68a" },
+    { tag: tags.definition(tags.variableName), color: "#e2e8f0" },
+    { tag: tags.attributeName, color: "#f9a8d4" },
+    { tag: tags.bool, color: "#fb923c" },
   ]);
 
   const checklistPattern = /^(\s*)([-*+] )\[([ xX])\]/;
@@ -921,7 +939,24 @@
         doc: content,
         extensions: [
           history(),
-          markdown(),
+          markdown({
+            codeLanguages: [
+              LanguageDescription.of({
+                name: "TypeScript",
+                alias: ["ts", "typescript"],
+                load() {
+                  return Promise.resolve(javascript({ typescript: true }));
+                },
+              }),
+              LanguageDescription.of({
+                name: "JavaScript",
+                alias: ["js", "javascript"],
+                load() {
+                  return Promise.resolve(javascript());
+                },
+              }),
+            ],
+          }),
           syntaxHighlighting(mdHighlight),
           mdPlugin,
           edgeWhitespaceSelection,

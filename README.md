@@ -28,7 +28,6 @@ pnpm run install:fast
 # tauri apps
 pnpm run note-client:dev
 pnpm run note-sticky:dev
-```
 
 ## Checks
 

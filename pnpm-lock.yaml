@@ -117,9 +117,6 @@ importers:
       '@note/utils':
         specifier: workspace:*
         version: link:../../packages/utils
-      '@tauri-apps/api':
-        specifier: ^2
-        version: 2.10.1
       idb-keyval:
         specifier: ^6.2.1
         version: 6.2.2
@@ -181,6 +178,9 @@ importers:
       '@codemirror/commands':
         specifier: ^6.7.1
         version: 6.10.2
+      '@codemirror/lang-javascript':
+        specifier: ^6.2.2
+        version: 6.2.5
       '@codemirror/lang-markdown':
         specifier: ^6.3.2
         version: 6.5.0
