@@ -1,40 +1,34 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
   import MarkdownEditor from "@note/editor";
   import { tabs, activeTabId, upsertTab, removeTab } from "@note/state";
   import type { TabDto } from "@note/types";
 
-  import WorkspacePicker from "./lib/components/WorkspacePicker.svelte";
-  import CollapseToggle from "./lib/components/CollapseToggle.svelte";
-  import FileList from "./lib/components/FileList.svelte";
-  import TabBar from "./lib/components/TabBar.svelte";
+  import CollapseToggle from "$lib/components/CollapseToggle.svelte";
+  import FileList from "$lib/components/FileList.svelte";
+  import TabBar from "$lib/components/TabBar.svelte";
 
-  import { workspaceState, workspaceFiles, workspaceName, buildHandleMap } from "./lib/stores/workspace";
-  import type { WorkspaceMode } from "./lib/stores/workspace";
-  import type { FileEntry } from "./services/fsAccess";
-  import { scanWorkspace, readFileEntry, writeFile, downloadFile } from "./services/fsAccess";
+  import { createWorkspaceStore, buildHandleMap } from "$lib/stores/workspace";
+  import type { WorkspaceMode } from "$lib/stores/workspace";
+  import type { FileEntry } from "../../services/fsAccess";
+  import { scanWorkspace, readFileEntry, writeFile, downloadFile } from "../../services/fsAccess";
   import {
     loadDirectoryHandle,
-    saveDirectoryHandle,
     saveWorkspaceName,
-    saveRecentWorkspace,
-    saveFallbackWorkspace,
     loadFallbackWorkspace,
-    type CachedFile
-  } from "./services/workspacePersistence";
+    type CachedFile,
+    saveFallbackWorkspace
+  } from "../../services/workspacePersistence";
   import {
-    isServerMode,
-    getServerWorkspace,
     listServerFiles,
     readServerFile,
     writeServerFile
-  } from "./services/serverApi";
+  } from "../../services/serverApi";
 
-  type AppStatus = "loading" | "picking" | "ready";
+  const { store: workspaceState, files: workspaceFiles, name: workspaceName } = createWorkspaceStore();
 
-  let status: AppStatus = "loading";
-  let existingHandle: FileSystemDirectoryHandle | null = null;
-  let serverModeAvailable = false;
   let sidebarCollapsed = false;
   let errorMessage = "";
 
@@ -45,74 +39,36 @@
   $: wsMode = $workspaceState.status === "ready" ? $workspaceState.mode : null;
   $: if (activeFilePath) localStorage.setItem("last-open-path", activeFilePath);
 
+  // The workspace path is in the URL query param
+  $: workspacePath = $page.url.searchParams.get("path") ?? "";
+
   onMount(async () => {
-    // Priority 1: Vite dev server API (works in any browser, full read/write)
-    if (await isServerMode()) {
-      serverModeAvailable = true;
-      const config = await getServerWorkspace();
-      if (config) {
-        await openServerWorkspace(config.name);
-        return;
-      }
-      status = "picking";
-      return;
-    }
+    if (!workspacePath) { goto("/"); return; }
 
-    // Priority 2: File System Access API (Chrome/Edge with full persistence)
-    if ("showDirectoryPicker" in window) {
-      try {
-        const handle = await loadDirectoryHandle();
-        if (handle) {
-          const perm = await handle.queryPermission({ mode: "readwrite" });
-          if (perm === "granted") {
-            await openFsaWorkspace(handle, null);
-            return;
-          }
-          existingHandle = handle;
-        }
-      } catch {
-        // IndexedDB unavailable or handle stale
-      }
-      status = "picking";
-      return;
+    if (workspacePath.startsWith("fsa:")) {
+      const handle = await loadDirectoryHandle();
+      if (!handle) { goto("/"); return; }
+      await openFsaWorkspace(handle, null);
+    } else if (workspacePath.startsWith("fallback:")) {
+      await openFallbackFromCache();
+    } else {
+      await openServerWorkspace(workspacePath);
     }
-
-    // Priority 3: Fallback cache (Brave/Firefox with content stored in IndexedDB)
-    try {
-      const cached = await loadFallbackWorkspace();
-      if (cached) {
-        const files: FileEntry[] = cached.files.map((f) => ({
-          name: f.name,
-          path: f.path,
-          cachedContent: f.content
-        }));
-        workspaceState.set({ status: "ready", name: cached.name, files, handleMap: new Map(), mode: "fallback" });
-        status = "ready";
-        return;
-      }
-    } catch {
-      // cache unavailable
-    }
-
-    status = "picking";
   });
 
   // --- Workspace openers ---
 
-  async function openServerWorkspace(name: string): Promise<void> {
+  async function openServerWorkspace(wsPath: string): Promise<void> {
     workspaceState.set({ status: "loading" });
     try {
-      const serverFiles = await listServerFiles();
+      const serverFiles = await listServerFiles(wsPath);
       const files: FileEntry[] = serverFiles.map((f) => ({ name: f.name, path: f.path }));
-      const config = await getServerWorkspace();
+      const name = wsPath.split(/[\\/]/).filter(Boolean).at(-1) ?? wsPath;
       workspaceState.set({ status: "ready", name, files, handleMap: new Map(), mode: "server" });
       saveWorkspaceName(name);
-      if (config) saveRecentWorkspace(config.path, name);
-      status = "ready";
       await restoreLastTab();
     } catch (e) {
       errorMessage = `Failed to load workspace: ${(e as Error).message}`;
-      status = "picking";
     }
   }
 
@@ -123,36 +79,28 @@
       const handleMap = buildHandleMap(files);
       const wsName = name ?? handle.name;
       workspaceState.set({ status: "ready", dirHandle: handle, name: wsName, files, handleMap, mode: "fsa" });
-      await saveDirectoryHandle(handle);
       saveWorkspaceName(wsName);
-      status = "ready";
       await restoreLastTab();
     } catch (e) {
       errorMessage = `Failed to load workspace: ${(e as Error).message}`;
-      status = "picking";
     }
   }
 
-  async function openFallbackWorkspace(entries: FileEntry[], name: string): Promise<void> {
+  async function openFallbackFromCache(): Promise<void> {
     workspaceState.set({ status: "loading" });
-    const enriched: FileEntry[] = [];
-    const cacheFiles: CachedFile[] = [];
-
-    for (const entry of entries) {
-      try {
-        const content = await readFileEntry(entry);
-        enriched.push({ ...entry, cachedContent: content });
-        cacheFiles.push({ path: entry.path, name: entry.name, content });
-      } catch {
-        enriched.push(entry);
-      }
+    try {
+      const cached = await loadFallbackWorkspace();
+      if (!cached) { goto("/"); return; }
+      const files: FileEntry[] = cached.files.map((f) => ({
+        name: f.name,
+        path: f.path,
+        cachedContent: f.content
+      }));
+      workspaceState.set({ status: "ready", name: cached.name, files, handleMap: new Map(), mode: "fallback" });
+      await restoreLastTab();
+    } catch (e) {
+      errorMessage = `Failed to load workspace: ${(e as Error).message}`;
     }
-
-    await saveFallbackWorkspace(name, cacheFiles);
-    saveWorkspaceName(name);
-    workspaceState.set({ status: "ready", name, files: enriched, handleMap: new Map(), mode: "fallback" });
-    status = "ready";
-    await restoreLastTab();
   }
 
   // --- Restore last open tab after workspace loads ---
@@ -164,24 +112,6 @@
     if (ws.status !== "ready") return;
     if (ws.files.some((f) => f.path === lastPath)) {
       await onFileClick(lastPath);
-    }
-  }
-
-  // --- Event handler from WorkspacePicker ---
-
-  function onWorkspaceSelected(event: CustomEvent<{
-    handle?: FileSystemDirectoryHandle;
-    entries?: FileEntry[];
-    name: string;
-    mode: WorkspaceMode;
-  }>) {
-    const { handle, entries, name, mode } = event.detail;
-    if (mode === "server") {
-      openServerWorkspace(name);
-    } else if (mode === "fsa" && handle) {
-      openFsaWorkspace(handle, name);
-    } else if (mode === "fallback" && entries) {
-      openFallbackWorkspace(entries, name);
     }
   }
 
@@ -200,7 +130,7 @@
     try {
       let content: string;
       if (ws.mode === "server") {
-        content = await readServerFile(path);
+        content = await readServerFile(workspacePath, path);
       } else {
         content = await readFileEntry(fileEntry);
       }
@@ -227,6 +157,24 @@
     upsertTab({ ...tab, content: value, cursor, is_dirty: true });
   }
 
+  // --- Create new draft tab ---
+
+  function createNewTab(): void {
+    const untitledCount = currentTabs.filter(t => t.linked_path === null).length;
+    const title = untitledCount === 0 ? "untitled" : `untitled (${untitledCount + 1})`;
+    const tab: TabDto = {
+      tab_id: crypto.randomUUID(),
+      title,
+      is_temp: true,
+      is_dirty: false,
+      linked_path: null,
+      content: "",
+      cursor: 0
+    };
+    upsertTab(tab);
+    activeTabId.set(tab.tab_id);
+  }
+
   // --- Save ---
 
   async function saveActive(): Promise<void> {
@@ -234,13 +182,49 @@
     const ws = $workspaceState;
     if (ws.status !== "ready") return;
 
-    // Server mode: direct write via Vite API
+    // Server mode — new draft: prompt for filename, write, refresh file list
+    if (ws.mode === "server" && !currentActiveTab.linked_path) {
+      const filename = window.prompt("Save as:", `${currentActiveTab.title}.md`);
+      if (!filename) return;
+      const path = `${workspacePath}/${filename}`;
+      try {
+        await writeServerFile(workspacePath, filename, currentActiveTab.content);
+        const serverFiles = await listServerFiles(workspacePath);
+        const files = serverFiles.map(f => ({ name: f.name, path: f.path }));
+        workspaceState.set({ ...ws, files });
+        upsertTab({ ...currentActiveTab, linked_path: filename, title: filename, is_temp: false, is_dirty: false });
+      } catch {
+        errorMessage = "Failed to save file.";
+      }
+      return;
+    }
+
+    // Server mode: direct write via API
     if (ws.mode === "server" && currentActiveTab.linked_path) {
       try {
-        await writeServerFile(currentActiveTab.linked_path, currentActiveTab.content);
+        await writeServerFile(workspacePath, currentActiveTab.linked_path, currentActiveTab.content);
         upsertTab({ ...currentActiveTab, is_dirty: false });
       } catch {
         errorMessage = "Failed to save file.";
+      }
+      return;
+    }
+
+    // FSA mode — new draft: showSaveFilePicker, update handleMap
+    if (ws.mode === "fsa" && !currentActiveTab.linked_path) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: `${currentActiveTab.title}.md`,
+          types: [{ description: "Markdown", accept: { "text/markdown": [".md"] } }]
+        });
+        await writeFile(handle, currentActiveTab.content);
+        const newHandleMap = new Map(ws.handleMap);
+        newHandleMap.set(handle.name, handle);
+        const newFile = { name: handle.name, path: handle.name };
+        workspaceState.set({ ...ws, files: [...ws.files, newFile], handleMap: newHandleMap });
+        upsertTab({ ...currentActiveTab, linked_path: handle.name, title: handle.name, is_temp: false, is_dirty: false });
+      } catch (e) {
+        if ((e as DOMException).name !== "AbortError") errorMessage = "Failed to save file.";
       }
       return;
     }
@@ -275,7 +259,6 @@
       } else {
         downloadFile(filename, currentActiveTab.content);
       }
-      // Update the cache so the saved version persists on reload
       const updatedFiles = ws.files.map((f) =>
         f.path === currentActiveTab.linked_path ? { ...f, cachedContent: currentActiveTab.content } : f
       );
@@ -302,15 +285,12 @@
 </script>
 
 <svelte:window on:keydown={onKeyDown} />
+<svelte:head>
+  <title>{$workspaceName ? `${$workspaceName} — note-markdown` : "note-markdown"}</title>
+</svelte:head>
 
-{#if status === "loading"}
+{#if $workspaceState.status === "loading"}
   <div class="splash">Loading…</div>
-{:else if status === "picking"}
-  <WorkspacePicker
-    {existingHandle}
-    serverMode={serverModeAvailable}
-    on:workspace-selected={onWorkspaceSelected}
-  />
 {:else}
   <div class="app-shell" class:collapsed={sidebarCollapsed} style="--sidebar-width: {sidebarCollapsed ? 0 : 220}px">
     <!-- Header row -->
@@ -320,7 +300,7 @@
     <div class="header-files">
       <span class="workspace-name" title={$workspaceName ?? ""}>{$workspaceName ?? ""}</span>
       {#if wsMode === "fallback"}
-        <button class="reload-btn" title="Select a new folder" on:click={() => (status = "picking")}>
+        <button class="reload-btn" title="Select a new folder" on:click={() => goto("/")}>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M10 6A4 4 0 1 1 6 2M6 2L8.5 4.5M6 2L3.5 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -333,6 +313,7 @@
         activeTabId={currentActiveTabId}
         onTabClick={(id) => activeTabId.set(id)}
         onTabClose={closeTab}
+        onNewTab={createNewTab}
       />
     </div>
 
@@ -347,7 +328,7 @@
           <path d="M1 3.5C1 2.67 1.67 2 2.5 2H5.5L7 3.5H11.5C12.33 3.5 13 4.17 13 5V10.5C13 11.33 12.33 12 11.5 12H2.5C1.67 12 1 11.33 1 10.5V3.5Z" stroke="currentColor" stroke-width="1.2" fill="none"/>
         </svg>
         <span class="ws-footer-name" title={$workspaceName ?? "workspace1"}>{$workspaceName ?? "workspace1"}</span>
-        <button class="ws-footer-btn" on:click={() => (status = "picking")} title="Open workspace">
+        <button class="ws-footer-btn" on:click={() => goto("/")} title="Open workspace">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M6.5 2V11M2 6.5H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
@@ -380,24 +361,6 @@
 {/if}
 
 <style>
-  :global(*, *::before, *::after) { box-sizing: border-box; }
-
-  :global(body) {
-    margin: 0;
-    padding: 0;
-    background: #1e1e1e;
-    color: #e0e0e0;
-    font-family: system-ui, sans-serif;
-    height: 100vh;
-    overflow: hidden;
-  }
-
-  :global(#app) {
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
   .splash {
     display: flex;
     align-items: center;

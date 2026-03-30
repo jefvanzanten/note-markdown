@@ -1,11 +1,8 @@
 {
-  "extends": "@tsconfig/svelte/tsconfig.json",
+  "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
     "strict": true,
-    "types": ["svelte", "node", "wicg-file-system-access"]
+    "types": ["@sveltejs/kit", "node", "wicg-file-system-access"]
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.svelte"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.svelte", "src-vite/**/*.ts"]
 }

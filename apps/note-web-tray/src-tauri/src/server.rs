@@ -19,11 +19,11 @@ struct Asset;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub config_path: PathBuf,
+    pub recents_path: PathBuf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct WorkspaceConfig {
+struct RecentWorkspace {
     path: String,
     name: String,
 }
@@ -52,17 +52,31 @@ struct PathQuery {
     path: Option<String>,
 }
 
-fn load_config(config_path: &Path) -> Option<WorkspaceConfig> {
-    let content = std::fs::read_to_string(config_path).ok()?;
-    serde_json::from_str(&content).ok()
+#[derive(Deserialize)]
+struct FileQuery {
+    workspace: Option<String>,
+    path: Option<String>,
 }
 
-fn save_config(config_path: &Path, config: &WorkspaceConfig) -> Result<(), String> {
-    if let Some(parent) = config_path.parent() {
+#[derive(Deserialize)]
+struct FilesQuery {
+    workspace: Option<String>,
+}
+
+fn load_recents(recents_path: &Path) -> Vec<RecentWorkspace> {
+    let content = match std::fs::read_to_string(recents_path) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    serde_json::from_str(&content).unwrap_or_default()
+}
+
+fn save_recents(recents_path: &Path, list: &[RecentWorkspace]) -> Result<(), String> {
+    if let Some(parent) = recents_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let content = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-    std::fs::write(config_path, content).map_err(|e| e.to_string())
+    let content = serde_json::to_string_pretty(list).map_err(|e| e.to_string())?;
+    std::fs::write(recents_path, content).map_err(|e| e.to_string())
 }
 
 fn scan_dir(dir: &Path, prefix: &str, results: &mut Vec<FileEntry>) -> Result<(), String> {
@@ -94,45 +108,45 @@ fn scan_dir(dir: &Path, prefix: &str, results: &mut Vec<FileEntry>) -> Result<()
     Ok(())
 }
 
-fn has_traversal(path: &str) -> bool {
-    path.split('/').any(|seg| seg == ".." || seg == ".")
+async fn get_recents(State(state): State<AppState>) -> impl IntoResponse {
+    axum::Json(load_recents(&state.recents_path))
 }
 
-async fn get_workspace(State(state): State<AppState>) -> impl IntoResponse {
-    axum::Json(load_config(&state.config_path))
-}
-
-async fn post_workspace(
+async fn post_workspaces(
     State(state): State<AppState>,
-    axum::Json(config): axum::Json<WorkspaceConfig>,
+    axum::Json(entry): axum::Json<RecentWorkspace>,
 ) -> impl IntoResponse {
-    if !Path::new(&config.path).exists() {
+    if !Path::new(&entry.path).exists() {
         return (
             StatusCode::BAD_REQUEST,
             axum::Json(serde_json::json!({ "error": "Path does not exist" })),
         )
             .into_response();
     }
-    match save_config(&state.config_path, &config) {
+    let mut list = load_recents(&state.recents_path);
+    list.retain(|r| r.path != entry.path);
+    list.insert(0, entry);
+    list.truncate(8);
+    match save_recents(&state.recents_path, &list) {
         Ok(_) => axum::Json(serde_json::json!({ "ok": true })).into_response(),
         Err(e) => (
-            StatusCode::BAD_REQUEST,
+            StatusCode::INTERNAL_SERVER_ERROR,
             axum::Json(serde_json::json!({ "error": e })),
         )
             .into_response(),
     }
 }
 
-async fn get_files(State(state): State<AppState>) -> impl IntoResponse {
-    let Some(config) = load_config(&state.config_path) else {
+async fn get_files(Query(query): Query<FilesQuery>) -> impl IntoResponse {
+    let Some(workspace) = query.workspace else {
         return (
-            StatusCode::NOT_FOUND,
-            axum::Json(serde_json::json!({ "error": "No workspace configured" })),
+            StatusCode::BAD_REQUEST,
+            axum::Json(serde_json::json!({ "error": "Missing workspace parameter" })),
         )
             .into_response();
     };
     let mut results = Vec::new();
-    match scan_dir(Path::new(&config.path), "", &mut results) {
+    match scan_dir(Path::new(&workspace), "", &mut results) {
         Ok(_) => {
             results.sort_by(|a, b| a.path.cmp(&b.path));
             axum::Json(results).into_response()
@@ -145,28 +159,19 @@ async fn get_files(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
-async fn get_file(
-    State(state): State<AppState>,
-    Query(query): Query<PathQuery>,
-) -> impl IntoResponse {
-    let Some(file_path) = query.path else {
-        return (StatusCode::BAD_REQUEST, "Missing path").into_response();
+async fn get_file(Query(query): Query<FileQuery>) -> impl IntoResponse {
+    let (Some(workspace), Some(file_path)) = (query.workspace, query.path) else {
+        return (StatusCode::BAD_REQUEST, "Missing workspace or path").into_response();
     };
-    if has_traversal(&file_path) {
-        return (StatusCode::FORBIDDEN, "Access denied").into_response();
-    }
-    let Some(config) = load_config(&state.config_path) else {
-        return (StatusCode::BAD_REQUEST, "No workspace configured").into_response();
-    };
-    let workspace = match std::fs::canonicalize(&config.path) {
+    let workspace_canon = match std::fs::canonicalize(&workspace) {
         Ok(p) => p,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+        Err(e) => return (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
     };
-    let abs = match std::fs::canonicalize(workspace.join(&file_path)) {
+    let abs = match std::fs::canonicalize(workspace_canon.join(&file_path)) {
         Ok(p) => p,
         Err(_) => return (StatusCode::NOT_FOUND, "File not found").into_response(),
     };
-    if !abs.starts_with(&workspace) {
+    if !abs.starts_with(&workspace_canon) {
         return (StatusCode::FORBIDDEN, "Access denied").into_response();
     }
     match std::fs::read_to_string(abs) {
@@ -180,25 +185,24 @@ async fn get_file(
     }
 }
 
-async fn put_file(
-    State(state): State<AppState>,
-    Query(query): Query<PathQuery>,
-    body: String,
-) -> impl IntoResponse {
-    let Some(file_path) = query.path else {
-        return (StatusCode::BAD_REQUEST, "Missing path").into_response();
+async fn put_file(Query(query): Query<FileQuery>, body: String) -> impl IntoResponse {
+    let (Some(workspace), Some(file_path)) = (query.workspace, query.path) else {
+        return (StatusCode::BAD_REQUEST, "Missing workspace or path").into_response();
     };
-    if has_traversal(&file_path) {
+    let workspace_canon = match std::fs::canonicalize(&workspace) {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+    };
+    let abs = workspace_canon.join(&file_path);
+    // Prevent path traversal via the resolved path
+    let abs_canon = match std::fs::canonicalize(abs.parent().unwrap_or(&abs)) {
+        Ok(p) => p.join(abs.file_name().unwrap_or_default()),
+        Err(_) => abs.clone(),
+    };
+    if !abs_canon.starts_with(&workspace_canon) {
         return (StatusCode::FORBIDDEN, "Access denied").into_response();
     }
-    let Some(config) = load_config(&state.config_path) else {
-        return (StatusCode::BAD_REQUEST, "No workspace configured").into_response();
-    };
-    let workspace = match std::fs::canonicalize(&config.path) {
-        Ok(p) => p,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-    };
-    match std::fs::write(workspace.join(&file_path), body) {
+    match std::fs::write(abs, body) {
         Ok(_) => (StatusCode::OK, "OK").into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
@@ -276,10 +280,11 @@ async fn serve_static(uri: axum::http::Uri) -> Response<Body> {
     }
 }
 
-pub async fn start(config_path: PathBuf) {
-    let state = AppState { config_path };
+pub async fn start(recents_path: PathBuf) {
+    let state = AppState { recents_path };
     let router = Router::new()
-        .route("/api/workspace", get(get_workspace).post(post_workspace))
+        .route("/api/workspaces/recent", get(get_recents))
+        .route("/api/workspaces", axum::routing::post(post_workspaces))
         .route("/api/files", get(get_files))
         .route("/api/file", get(get_file).put(put_file))
         .route("/api/list-dirs", get(get_list_dirs))

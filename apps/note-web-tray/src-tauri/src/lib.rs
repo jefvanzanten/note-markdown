@@ -10,9 +10,9 @@ use tauri::{
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let config_path = app.path().app_data_dir().unwrap().join(".workspace.json");
+            let recents_path = app.path().app_data_dir().unwrap().join("recent-workspaces.json");
             tauri::async_runtime::spawn(async move {
-                server::start(config_path).await;
+                server::start(recents_path).await;
             });
 
             let open_item =

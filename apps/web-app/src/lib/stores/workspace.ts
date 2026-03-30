@@ -9,15 +9,12 @@ export type WorkspaceState =
   | { status: "ready"; dirHandle?: FileSystemDirectoryHandle; name: string; files: FileEntry[]; handleMap: Map<string, FileSystemFileHandle>; mode: WorkspaceMode }
   | { status: "error"; message: string };
 
-export const workspaceState = writable<WorkspaceState>({ status: "idle" });
-
-export const workspaceFiles = derived(workspaceState, ($ws) =>
-  $ws.status === "ready" ? $ws.files : []
-);
-
-export const workspaceName = derived(workspaceState, ($ws) =>
-  $ws.status === "ready" ? $ws.name : null
-);
+export function createWorkspaceStore() {
+  const store = writable<WorkspaceState>({ status: "idle" });
+  const files = derived(store, ($ws) => $ws.status === "ready" ? $ws.files : []);
+  const name = derived(store, ($ws) => $ws.status === "ready" ? $ws.name : null);
+  return { store, files, name };
+}
 
 export const buildHandleMap = (files: FileEntry[]): Map<string, FileSystemFileHandle> => {
   const map = new Map<string, FileSystemFileHandle>();

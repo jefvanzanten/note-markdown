@@ -33,7 +33,7 @@
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-noninteractive-element-interactions -->
-<div class="browser-overlay" on:click|self={() => dispatch("cancel")} role="dialog" aria-modal="true">
+<div class="browser-overlay" on:click|self={() => dispatch("cancel")} role="dialog" aria-modal="true" tabindex="-1">
   <div class="browser">
     <div class="browser-header">
       <span class="browser-title">Select folder</span>

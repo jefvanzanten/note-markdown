@@ -1,25 +1,16 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
-  import { loadWorkspaceName, loadRecentWorkspaces, type RecentWorkspace } from "../../services/workspacePersistence";
-  import { buildFallbackEntries, type FileEntry } from "../../services/fsAccess";
-  import { setServerWorkspace } from "../../services/serverApi";
+  import { loadWorkspaceName, saveDirectoryHandle, saveFallbackWorkspace, type CachedFile } from "../../services/workspacePersistence";
+  import { buildFallbackEntries, readFileEntry, type FileEntry } from "../../services/fsAccess";
+  import { registerWorkspace } from "../../services/serverApi";
   import FolderBrowser from "./FolderBrowser.svelte";
 
   export let existingHandle: FileSystemDirectoryHandle | null = null;
   export let serverMode = false;
-
-  const dispatch = createEventDispatcher<{
-    "workspace-selected": {
-      handle?: FileSystemDirectoryHandle;
-      entries?: FileEntry[];
-      name: string;
-      mode: "server" | "fsa" | "fallback";
-    };
-  }>();
+  export let recentWorkspaces: { path: string; name: string }[] = [];
+  export let onChosen: (path: string) => void;
 
   const supportsDirectoryPicker = "showDirectoryPicker" in window;
   const savedName = loadWorkspaceName();
-  const recentWorkspaces: RecentWorkspace[] = serverMode ? loadRecentWorkspaces() : [];
 
   let workspaceName = savedName ?? "";
   let folderPath = "";
@@ -38,14 +29,14 @@
     error = "";
     try {
       const name = workspaceName.trim() || folderPath.split(/[\\/]/).filter(Boolean).at(-1) || "workspace";
-      await setServerWorkspace(folderPath.trim(), name);
-      dispatch("workspace-selected", { name, mode: "server" });
+      await registerWorkspace(folderPath.trim(), name);
+      onChosen(folderPath.trim());
     } catch (e) {
       error = `Could not open folder: ${(e as Error).message}`;
     }
   }
 
-  function openRecent(recent: RecentWorkspace) {
+  function openRecent(recent: { path: string; name: string }) {
     folderPath = recent.path;
     workspaceName = recent.name;
     openServerWorkspace();
@@ -55,7 +46,8 @@
     if (!existingHandle) return;
     try {
       await existingHandle.requestPermission({ mode: "readwrite" });
-      dispatch("workspace-selected", { handle: existingHandle, name: workspaceName || existingHandle.name, mode: "fsa" });
+      await saveDirectoryHandle(existingHandle);
+      onChosen(`fsa:${existingHandle.name}`);
     } catch {
       error = "Permission denied.";
     }
@@ -65,7 +57,8 @@
     try {
       const handle = await window.showDirectoryPicker({ mode: "readwrite" });
       if (!workspaceName) workspaceName = handle.name;
-      dispatch("workspace-selected", { handle, name: workspaceName || handle.name, mode: "fsa" });
+      await saveDirectoryHandle(handle);
+      onChosen(`fsa:${handle.name}`);
     } catch (e) {
       const err = e as DOMException;
       if (err.name === "AbortError") return;
@@ -73,13 +66,26 @@
     }
   }
 
-  function onFilesSelected() {
+  async function onFilesSelected() {
     const files = fileInput.files;
     if (!files || files.length === 0) return;
     const { entries, rootName } = buildFallbackEntries(files);
     const name = workspaceName || rootName;
     workspaceName = name;
-    dispatch("workspace-selected", { entries, name, mode: "fallback" });
+
+    const enriched: FileEntry[] = [];
+    const cacheFiles: CachedFile[] = [];
+    for (const entry of entries) {
+      try {
+        const content = await readFileEntry(entry);
+        enriched.push({ ...entry, cachedContent: content });
+        cacheFiles.push({ path: entry.path, name: entry.name, content });
+      } catch {
+        enriched.push(entry);
+      }
+    }
+    await saveFallbackWorkspace(name, cacheFiles);
+    onChosen(`fallback:${name}`);
   }
 </script>
 

@@ -4,23 +4,24 @@ import path from "node:path";
 import os from "node:os";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-interface WorkspaceConfig {
+const RECENT_FILE = path.join(process.cwd(), ".recent-workspaces.json");
+const MAX_RECENT = 8;
+
+interface RecentWorkspace {
   path: string;
   name: string;
 }
 
-const CONFIG_FILE = path.join(process.cwd(), ".workspace.json");
-
-async function loadConfig(): Promise<WorkspaceConfig | null> {
+async function loadRecents(): Promise<RecentWorkspace[]> {
   try {
-    return JSON.parse(await fs.readFile(CONFIG_FILE, "utf-8")) as WorkspaceConfig;
+    return JSON.parse(await fs.readFile(RECENT_FILE, "utf-8")) as RecentWorkspace[];
   } catch {
-    return null;
+    return [];
   }
 }
 
-async function saveConfig(config: WorkspaceConfig): Promise<void> {
-  await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
+async function saveRecents(list: RecentWorkspace[]): Promise<void> {
+  await fs.writeFile(RECENT_FILE, JSON.stringify(list, null, 2), "utf-8");
 }
 
 async function scanDir(
@@ -64,18 +65,19 @@ export function fileSystemPlugin(): Plugin {
         const { pathname, searchParams } = url;
         const method = req.method ?? "GET";
 
-        // GET /api/workspace — returns current config or null
-        if (pathname === "/api/workspace" && method === "GET") {
-          json(res, await loadConfig());
+        // GET /api/workspaces/recent — list recent workspaces
+        if (pathname === "/api/workspaces/recent" && method === "GET") {
+          json(res, await loadRecents());
           return;
         }
 
-        // POST /api/workspace — set workspace { path, name }
-        if (pathname === "/api/workspace" && method === "POST") {
+        // POST /api/workspaces — register workspace { path, name }
+        if (pathname === "/api/workspaces" && method === "POST") {
           try {
-            const config = JSON.parse(await readBody(req)) as WorkspaceConfig;
-            await fs.access(config.path); // throws if path doesn't exist
-            await saveConfig(config);
+            const body = JSON.parse(await readBody(req)) as RecentWorkspace;
+            await fs.access(body.path); // throws if path doesn't exist
+            const list = (await loadRecents()).filter((r) => r.path !== body.path);
+            await saveRecents([{ path: body.path, name: body.name }, ...list].slice(0, MAX_RECENT));
             json(res, { ok: true });
           } catch (e) {
             json(res, { error: String(e) }, 400);
@@ -83,13 +85,13 @@ export function fileSystemPlugin(): Plugin {
           return;
         }
 
-        // GET /api/files — list all .md files in workspace
+        // GET /api/files?workspace=<path> — list all .md files in workspace
         if (pathname === "/api/files" && method === "GET") {
-          const config = await loadConfig();
-          if (!config) { json(res, { error: "No workspace configured" }, 404); return; }
+          const workspace = searchParams.get("workspace");
+          if (!workspace) { json(res, { error: "Missing workspace parameter" }, 400); return; }
           try {
             const results: { path: string; name: string }[] = [];
-            await scanDir(config.path, "", results);
+            await scanDir(workspace, "", results);
             results.sort((a, b) => a.path.localeCompare(b.path));
             json(res, results);
           } catch (e) {
@@ -98,13 +100,13 @@ export function fileSystemPlugin(): Plugin {
           return;
         }
 
-        // GET /api/file?path=... — read file content
+        // GET /api/file?workspace=<path>&path=<rel> — read file content
         if (pathname === "/api/file" && method === "GET") {
-          const config = await loadConfig();
+          const workspace = searchParams.get("workspace");
           const filePath = searchParams.get("path");
-          if (!config || !filePath) { res.statusCode = 400; res.end(); return; }
-          const abs = path.resolve(config.path, filePath);
-          if (!abs.startsWith(path.resolve(config.path))) { res.statusCode = 403; res.end(); return; }
+          if (!workspace || !filePath) { res.statusCode = 400; res.end(); return; }
+          const abs = path.resolve(workspace, filePath);
+          if (!abs.startsWith(path.resolve(workspace))) { res.statusCode = 403; res.end(); return; }
           try {
             res.setHeader("Content-Type", "text/plain; charset=utf-8");
             res.end(await fs.readFile(abs, "utf-8"));
@@ -115,13 +117,13 @@ export function fileSystemPlugin(): Plugin {
           return;
         }
 
-        // PUT /api/file?path=... — write file content (body = text)
+        // PUT /api/file?workspace=<path>&path=<rel> — write file content (body = text)
         if (pathname === "/api/file" && method === "PUT") {
-          const config = await loadConfig();
+          const workspace = searchParams.get("workspace");
           const filePath = searchParams.get("path");
-          if (!config || !filePath) { res.statusCode = 400; res.end(); return; }
-          const abs = path.resolve(config.path, filePath);
-          if (!abs.startsWith(path.resolve(config.path))) { res.statusCode = 403; res.end(); return; }
+          if (!workspace || !filePath) { res.statusCode = 400; res.end(); return; }
+          const abs = path.resolve(workspace, filePath);
+          if (!abs.startsWith(path.resolve(workspace))) { res.statusCode = 403; res.end(); return; }
           try {
             await fs.writeFile(abs, await readBody(req), "utf-8");
             res.end("OK");

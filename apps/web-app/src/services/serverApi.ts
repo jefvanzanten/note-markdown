@@ -1,51 +1,53 @@
 export type ServerFile = { path: string; name: string };
+export type RecentWorkspace = { path: string; name: string };
 
-/** Returns true when the Vite dev server's file system API is reachable. */
+/** Returns true when the server API is reachable. */
 export const isServerMode = async (): Promise<boolean> => {
   try {
-    const res = await fetch("/api/workspace");
+    const res = await fetch("/api/workspaces/recent");
     return res.headers.get("content-type")?.includes("application/json") ?? false;
   } catch {
     return false;
   }
 };
 
-/** Get the currently configured workspace, or null if none is set. */
-export const getServerWorkspace = async (): Promise<{ path: string; name: string } | null> => {
-  const res = await fetch("/api/workspace");
-  return res.json() as Promise<{ path: string; name: string } | null>;
+/** Get the list of recent workspaces. */
+export const getRecentWorkspaces = async (): Promise<RecentWorkspace[]> => {
+  const res = await fetch("/api/workspaces/recent");
+  if (!res.ok) return [];
+  return res.json() as Promise<RecentWorkspace[]>;
 };
 
-/** Save the workspace path to the server-side .workspace.json config. */
-export const setServerWorkspace = async (dirPath: string, name: string): Promise<void> => {
-  const res = await fetch("/api/workspace", {
+/** Register a workspace (validates it exists and adds it to recents). */
+export const registerWorkspace = async (dirPath: string, name: string): Promise<void> => {
+  const res = await fetch("/api/workspaces", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path: dirPath, name })
   });
   if (!res.ok) {
     const err = (await res.json()) as { error: string };
-    throw new Error(err.error ?? "Failed to set workspace");
+    throw new Error(err.error ?? "Failed to register workspace");
   }
 };
 
-/** List all .md files in the configured workspace. */
-export const listServerFiles = async (): Promise<ServerFile[]> => {
-  const res = await fetch("/api/files");
+/** List all .md files in the given workspace directory. */
+export const listServerFiles = async (workspace: string): Promise<ServerFile[]> => {
+  const res = await fetch(`/api/files?workspace=${encodeURIComponent(workspace)}`);
   if (!res.ok) throw new Error("Failed to list files");
   return res.json() as Promise<ServerFile[]>;
 };
 
 /** Read a file's content by its workspace-relative path. */
-export const readServerFile = async (filePath: string): Promise<string> => {
-  const res = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
+export const readServerFile = async (workspace: string, filePath: string): Promise<string> => {
+  const res = await fetch(`/api/file?workspace=${encodeURIComponent(workspace)}&path=${encodeURIComponent(filePath)}`);
   if (!res.ok) throw new Error(`Cannot read ${filePath}`);
   return res.text();
 };
 
 /** Write content to a file by its workspace-relative path. */
-export const writeServerFile = async (filePath: string, content: string): Promise<void> => {
-  const res = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`, {
+export const writeServerFile = async (workspace: string, filePath: string, content: string): Promise<void> => {
+  const res = await fetch(`/api/file?workspace=${encodeURIComponent(workspace)}&path=${encodeURIComponent(filePath)}`, {
     method: "PUT",
     body: content
   });

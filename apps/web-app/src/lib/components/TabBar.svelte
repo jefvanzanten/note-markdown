@@ -5,9 +5,17 @@
   export let activeTabId: string | null;
   export let onTabClick: (tabId: string) => void;
   export let onTabClose: (tabId: string) => void;
+  export let onNewTab: () => void;
 </script>
 
 <div class="tab-bar">
+  <button
+    class="new-tab-btn"
+    on:click={onNewTab}
+    title="New tab"
+    aria-label="New tab"
+    data-testid="new-tab-btn"
+  >+</button>
   {#each tabs as tab (tab.tab_id)}
     <button
       class="tab"
@@ -19,14 +27,17 @@
       {#if tab.is_dirty}
         <span class="dirty" title="Unsaved changes">•</span>
       {/if}
-      <button
+      <span
         class="close-btn"
+        role="button"
+        tabindex="0"
         on:click|stopPropagation={() => onTabClose(tab.tab_id)}
+        on:keydown={(e) => e.key === "Enter" && onTabClose(tab.tab_id)}
         title="Close tab"
         aria-label="Close {tab.title}"
       >
         ×
-      </button>
+      </span>
     </button>
   {/each}
 </div>
@@ -119,6 +130,28 @@
 
   .close-btn:hover {
     background: var(--hover, rgba(255, 255, 255, 0.1));
+    color: var(--text, #e0e0e0);
+  }
+
+  .new-tab-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted, #999);
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0;
+    transition: background 0.1s, color 0.1s;
+  }
+
+  .new-tab-btn:hover {
+    background: var(--hover, rgba(255, 255, 255, 0.06));
     color: var(--text, #e0e0e0);
   }
 </style>
