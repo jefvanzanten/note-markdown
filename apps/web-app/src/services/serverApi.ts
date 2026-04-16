@@ -60,6 +60,26 @@ export type DirListing = {
   dirs: { name: string; path: string }[];
 };
 
+/** Delete a file or folder by its workspace-relative path. */
+export const deleteServerFile = async (workspace: string, filePath: string): Promise<void> => {
+  const res = await fetch(`/api/file?workspace=${encodeURIComponent(workspace)}&path=${encodeURIComponent(filePath)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`Cannot delete ${filePath}`);
+};
+
+/** Rename a file or folder: oldPath and newPath are workspace-relative. */
+export const renameServerFile = async (workspace: string, oldPath: string, newPath: string): Promise<void> => {
+  const res = await fetch(
+    `/api/file?workspace=${encodeURIComponent(workspace)}&path=${encodeURIComponent(oldPath)}&newPath=${encodeURIComponent(newPath)}`,
+    { method: "PATCH" }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Cannot rename ${oldPath}`);
+  }
+};
+
 /** List subdirectories of a path (defaults to home dir when path is omitted). */
 export const listDirs = async (dirPath?: string): Promise<DirListing> => {
   const url = dirPath ? `/api/list-dirs?path=${encodeURIComponent(dirPath)}` : "/api/list-dirs";

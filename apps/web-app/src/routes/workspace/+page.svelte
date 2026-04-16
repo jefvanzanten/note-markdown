@@ -13,28 +13,66 @@
   import { createWorkspaceStore, buildHandleMap } from "$lib/stores/workspace";
   import type { WorkspaceMode } from "$lib/stores/workspace";
   import type { FileEntry } from "../../services/fsAccess";
-  import { scanWorkspace, readFileEntry, writeFile, downloadFile } from "../../services/fsAccess";
+  import {
+    scanWorkspace,
+    readFileEntry,
+    writeFile,
+    downloadFile,
+  } from "../../services/fsAccess";
   import {
     loadDirectoryHandle,
     saveWorkspaceName,
     loadFallbackWorkspace,
     type CachedFile,
-    saveFallbackWorkspace
+    saveFallbackWorkspace,
   } from "../../services/workspacePersistence";
   import {
     listServerFiles,
     readServerFile,
-    writeServerFile
+    writeServerFile,
+    deleteServerFile,
+    renameServerFile,
   } from "../../services/serverApi";
 
-  const { store: workspaceState, files: workspaceFiles, name: workspaceName } = createWorkspaceStore();
+  const {
+    store: workspaceState,
+    files: workspaceFiles,
+    name: workspaceName,
+  } = createWorkspaceStore();
 
   let sidebarCollapsed = false;
+  let sidebarWidth = 220;
+  let isDragging = false;
   let errorMessage = "";
+
+  function startDrag(e: MouseEvent): void {
+    isDragging = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  }
+
+  function onDragMove(e: MouseEvent): void {
+    if (!isDragging) return;
+    const rawWidth = e.clientX;
+    if (rawWidth < 50) {
+      sidebarCollapsed = true;
+    } else {
+      sidebarCollapsed = false;
+      sidebarWidth = Math.max(120, Math.min(600, rawWidth));
+    }
+  }
+
+  function stopDrag(): void {
+    isDragging = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }
 
   $: currentTabs = $tabs;
   $: currentActiveTabId = $activeTabId;
-  $: currentActiveTab = currentTabs.find((t) => t.tab_id === currentActiveTabId) ?? null;
+  $: currentActiveTab =
+    currentTabs.find((t) => t.tab_id === currentActiveTabId) ?? null;
   $: activeFilePath = currentActiveTab?.linked_path ?? null;
   $: wsMode = $workspaceState.status === "ready" ? $workspaceState.mode : null;
   $: if (activeFilePath) localStorage.setItem("last-open-path", activeFilePath);
@@ -43,11 +81,17 @@
   $: workspacePath = $page.url.searchParams.get("path") ?? "";
 
   onMount(async () => {
-    if (!workspacePath) { goto("/"); return; }
+    if (!workspacePath) {
+      goto("/");
+      return;
+    }
 
     if (workspacePath.startsWith("fsa:")) {
       const handle = await loadDirectoryHandle();
-      if (!handle) { goto("/"); return; }
+      if (!handle) {
+        goto("/");
+        return;
+      }
       await openFsaWorkspace(handle, null);
     } else if (workspacePath.startsWith("fallback:")) {
       await openFallbackFromCache();
@@ -62,9 +106,18 @@
     workspaceState.set({ status: "loading" });
     try {
       const serverFiles = await listServerFiles(wsPath);
-      const files: FileEntry[] = serverFiles.map((f) => ({ name: f.name, path: f.path }));
+      const files: FileEntry[] = serverFiles.map((f) => ({
+        name: f.name,
+        path: f.path,
+      }));
       const name = wsPath.split(/[\\/]/).filter(Boolean).at(-1) ?? wsPath;
-      workspaceState.set({ status: "ready", name, files, handleMap: new Map(), mode: "server" });
+      workspaceState.set({
+        status: "ready",
+        name,
+        files,
+        handleMap: new Map(),
+        mode: "server",
+      });
       saveWorkspaceName(name);
       await restoreLastTab();
     } catch (e) {
@@ -72,13 +125,23 @@
     }
   }
 
-  async function openFsaWorkspace(handle: FileSystemDirectoryHandle, name: string | null): Promise<void> {
+  async function openFsaWorkspace(
+    handle: FileSystemDirectoryHandle,
+    name: string | null,
+  ): Promise<void> {
     workspaceState.set({ status: "loading" });
     try {
       const files = await scanWorkspace(handle);
       const handleMap = buildHandleMap(files);
       const wsName = name ?? handle.name;
-      workspaceState.set({ status: "ready", dirHandle: handle, name: wsName, files, handleMap, mode: "fsa" });
+      workspaceState.set({
+        status: "ready",
+        dirHandle: handle,
+        name: wsName,
+        files,
+        handleMap,
+        mode: "fsa",
+      });
       saveWorkspaceName(wsName);
       await restoreLastTab();
     } catch (e) {
@@ -90,13 +153,22 @@
     workspaceState.set({ status: "loading" });
     try {
       const cached = await loadFallbackWorkspace();
-      if (!cached) { goto("/"); return; }
+      if (!cached) {
+        goto("/");
+        return;
+      }
       const files: FileEntry[] = cached.files.map((f) => ({
         name: f.name,
         path: f.path,
-        cachedContent: f.content
+        cachedContent: f.content,
       }));
-      workspaceState.set({ status: "ready", name: cached.name, files, handleMap: new Map(), mode: "fallback" });
+      workspaceState.set({
+        status: "ready",
+        name: cached.name,
+        files,
+        handleMap: new Map(),
+        mode: "fallback",
+      });
       await restoreLastTab();
     } catch (e) {
       errorMessage = `Failed to load workspace: ${(e as Error).message}`;
@@ -119,7 +191,10 @@
 
   async function onFileClick(path: string): Promise<void> {
     const existing = currentTabs.find((t) => t.linked_path === path);
-    if (existing) { activeTabId.set(existing.tab_id); return; }
+    if (existing) {
+      activeTabId.set(existing.tab_id);
+      return;
+    }
 
     const ws = $workspaceState;
     if (ws.status !== "ready") return;
@@ -142,7 +217,7 @@
         is_dirty: false,
         linked_path: path,
         content,
-        cursor: 0
+        cursor: 0,
       };
       upsertTab(tab);
       activeTabId.set(tab.tab_id);
@@ -160,8 +235,11 @@
   // --- Create new draft tab ---
 
   function createNewTab(): void {
-    const untitledCount = currentTabs.filter(t => t.linked_path === null).length;
-    const title = untitledCount === 0 ? "untitled" : `untitled (${untitledCount + 1})`;
+    const untitledCount = currentTabs.filter(
+      (t) => t.linked_path === null,
+    ).length;
+    const title =
+      untitledCount === 0 ? "untitled" : `untitled (${untitledCount + 1})`;
     const tab: TabDto = {
       tab_id: crypto.randomUUID(),
       title,
@@ -169,7 +247,7 @@
       is_dirty: false,
       linked_path: null,
       content: "",
-      cursor: 0
+      cursor: 0,
     };
     upsertTab(tab);
     activeTabId.set(tab.tab_id);
@@ -184,15 +262,28 @@
 
     // Server mode — new draft: prompt for filename, write, refresh file list
     if (ws.mode === "server" && !currentActiveTab.linked_path) {
-      const filename = window.prompt("Save as:", `${currentActiveTab.title}.md`);
+      const filename = window.prompt(
+        "Save as:",
+        `${currentActiveTab.title}.md`,
+      );
       if (!filename) return;
       const path = `${workspacePath}/${filename}`;
       try {
-        await writeServerFile(workspacePath, filename, currentActiveTab.content);
+        await writeServerFile(
+          workspacePath,
+          filename,
+          currentActiveTab.content,
+        );
         const serverFiles = await listServerFiles(workspacePath);
-        const files = serverFiles.map(f => ({ name: f.name, path: f.path }));
+        const files = serverFiles.map((f) => ({ name: f.name, path: f.path }));
         workspaceState.set({ ...ws, files });
-        upsertTab({ ...currentActiveTab, linked_path: filename, title: filename, is_temp: false, is_dirty: false });
+        upsertTab({
+          ...currentActiveTab,
+          linked_path: filename,
+          title: filename,
+          is_temp: false,
+          is_dirty: false,
+        });
       } catch {
         errorMessage = "Failed to save file.";
       }
@@ -202,7 +293,11 @@
     // Server mode: direct write via API
     if (ws.mode === "server" && currentActiveTab.linked_path) {
       try {
-        await writeServerFile(workspacePath, currentActiveTab.linked_path, currentActiveTab.content);
+        await writeServerFile(
+          workspacePath,
+          currentActiveTab.linked_path,
+          currentActiveTab.content,
+        );
         upsertTab({ ...currentActiveTab, is_dirty: false });
       } catch {
         errorMessage = "Failed to save file.";
@@ -215,16 +310,29 @@
       try {
         const handle = await window.showSaveFilePicker({
           suggestedName: `${currentActiveTab.title}.md`,
-          types: [{ description: "Markdown", accept: { "text/markdown": [".md"] } }]
+          types: [
+            { description: "Markdown", accept: { "text/markdown": [".md"] } },
+          ],
         });
         await writeFile(handle, currentActiveTab.content);
         const newHandleMap = new Map(ws.handleMap);
         newHandleMap.set(handle.name, handle);
         const newFile = { name: handle.name, path: handle.name };
-        workspaceState.set({ ...ws, files: [...ws.files, newFile], handleMap: newHandleMap });
-        upsertTab({ ...currentActiveTab, linked_path: handle.name, title: handle.name, is_temp: false, is_dirty: false });
+        workspaceState.set({
+          ...ws,
+          files: [...ws.files, newFile],
+          handleMap: newHandleMap,
+        });
+        upsertTab({
+          ...currentActiveTab,
+          linked_path: handle.name,
+          title: handle.name,
+          is_temp: false,
+          is_dirty: false,
+        });
       } catch (e) {
-        if ((e as DOMException).name !== "AbortError") errorMessage = "Failed to save file.";
+        if ((e as DOMException).name !== "AbortError")
+          errorMessage = "Failed to save file.";
       }
       return;
     }
@@ -249,7 +357,9 @@
         try {
           const handle = await window.showSaveFilePicker({
             suggestedName: filename,
-            types: [{ description: "Markdown", accept: { "text/markdown": [".md"] } }]
+            types: [
+              { description: "Markdown", accept: { "text/markdown": [".md"] } },
+            ],
           });
           await writeFile(handle, currentActiveTab.content);
         } catch (e) {
@@ -260,12 +370,18 @@
         downloadFile(filename, currentActiveTab.content);
       }
       const updatedFiles = ws.files.map((f) =>
-        f.path === currentActiveTab.linked_path ? { ...f, cachedContent: currentActiveTab.content } : f
+        f.path === currentActiveTab.linked_path
+          ? { ...f, cachedContent: currentActiveTab.content }
+          : f,
       );
       workspaceState.set({ ...ws, files: updatedFiles });
       await saveFallbackWorkspace(
         ws.name,
-        updatedFiles.map((f) => ({ path: f.path, name: f.name, content: f.cachedContent ?? "" }))
+        updatedFiles.map((f) => ({
+          path: f.path,
+          name: f.name,
+          content: f.cachedContent ?? "",
+        })),
       );
       upsertTab({ ...currentActiveTab, is_dirty: false });
     }
@@ -274,63 +390,190 @@
   function closeTab(tabId: string): void {
     removeTab(tabId);
     const remaining = $tabs;
-    activeTabId.set(remaining.length > 0 ? remaining[remaining.length - 1].tab_id : null);
+    activeTabId.set(
+      remaining.length > 0 ? remaining[remaining.length - 1].tab_id : null,
+    );
+  }
+
+  async function onRenameFile(oldPath: string, newPath: string): Promise<void> {
+    const ws = $workspaceState;
+    if (ws.status !== "ready" || ws.mode !== "server") return;
+    try {
+      await renameServerFile(workspacePath, oldPath, newPath);
+      const serverFiles = await listServerFiles(workspacePath);
+      const files = serverFiles.map((f) => ({ name: f.name, path: f.path }));
+      workspaceState.set({ ...ws, files });
+      tabs.update((current) =>
+        current.map((t) => {
+          if (t.linked_path === oldPath) {
+            const newName = newPath.split("/").at(-1)?.replace(/\.(md|markdown)$/i, "") ?? newPath;
+            return { ...t, linked_path: newPath, title: newName };
+          }
+          if (t.linked_path?.startsWith(oldPath + "/")) {
+            const newLinkedPath = newPath + t.linked_path.slice(oldPath.length);
+            const newName = newLinkedPath.split("/").at(-1)?.replace(/\.(md|markdown)$/i, "") ?? newLinkedPath;
+            return { ...t, linked_path: newLinkedPath, title: newName };
+          }
+          return t;
+        })
+      );
+    } catch (e) {
+      errorMessage = `Failed to rename: ${(e as Error).message}`;
+    }
+  }
+
+  async function onDeleteFile(path: string, kind: "file" | "folder"): Promise<void> {
+    const ws = $workspaceState;
+    if (ws.status !== "ready" || ws.mode !== "server") return;
+    const label = kind === "folder" ? `folder "${path}" and all its contents` : `"${path}"`;
+    if (!window.confirm(`Delete ${label}?`)) return;
+    try {
+      await deleteServerFile(workspacePath, path);
+      const serverFiles = await listServerFiles(workspacePath);
+      const files = serverFiles.map((f) => ({ name: f.name, path: f.path }));
+      workspaceState.set({ ...ws, files });
+      const affectedIds = new Set(
+        currentTabs
+          .filter((t) => t.linked_path === path || (kind === "folder" && t.linked_path?.startsWith(path + "/")))
+          .map((t) => t.tab_id)
+      );
+      if ($activeTabId && affectedIds.has($activeTabId)) {
+        const remaining = currentTabs.filter((t) => !affectedIds.has(t.tab_id));
+        activeTabId.set(remaining.length > 0 ? remaining[remaining.length - 1].tab_id : null);
+      }
+      affectedIds.forEach((id) => removeTab(id));
+    } catch (e) {
+      errorMessage = `Failed to delete: ${(e as Error).message}`;
+    }
   }
 
   function onKeyDown(e: KeyboardEvent): void {
     const ctrl = e.ctrlKey || e.metaKey;
-    if (ctrl && e.key === "s") { e.preventDefault(); saveActive(); }
-    if (ctrl && e.key === "w") { e.preventDefault(); if (currentActiveTabId) closeTab(currentActiveTabId); }
+    if (ctrl && e.key === "s") {
+      e.preventDefault();
+      saveActive();
+    }
+    if (ctrl && e.key === "w") {
+      e.preventDefault();
+      if (currentActiveTabId) closeTab(currentActiveTabId);
+    }
   }
 </script>
 
-<svelte:window on:keydown={onKeyDown} />
+<svelte:window on:keydown={onKeyDown} on:mousemove={onDragMove} on:mouseup={stopDrag} />
 <svelte:head>
-  <title>{$workspaceName ? `${$workspaceName} — note-markdown` : "note-markdown"}</title>
+  <title
+    >{$workspaceName
+      ? `${$workspaceName} — note-markdown`
+      : "note-markdown"}</title
+  >
 </svelte:head>
 
 {#if $workspaceState.status === "loading"}
   <div class="splash">Loading…</div>
 {:else}
-  <div class="app-shell" class:collapsed={sidebarCollapsed} style="--sidebar-width: {sidebarCollapsed ? 0 : 220}px">
+  <div
+    class="app-shell"
+    style="--sidebar-width: {sidebarCollapsed ? 0 : sidebarWidth}px"
+  >
     <!-- Header row -->
-    <div class="header-toggle">
-      <CollapseToggle collapsed={sidebarCollapsed} onToggle={() => (sidebarCollapsed = !sidebarCollapsed)} />
-    </div>
     <div class="header-files">
-      <span class="workspace-name" title={$workspaceName ?? ""}>{$workspaceName ?? ""}</span>
+      <span class="workspace-name" title={$workspaceName ?? ""}
+        >{$workspaceName ?? ""}</span
+      >
       {#if wsMode === "fallback"}
-        <button class="reload-btn" title="Select a new folder" on:click={() => goto("/")}>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10 6A4 4 0 1 1 6 2M6 2L8.5 4.5M6 2L3.5 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        <button
+          class="reload-btn"
+          title="Select a new folder"
+          on:click={() => goto("/")}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M10 6A4 4 0 1 1 6 2M6 2L8.5 4.5M6 2L3.5 4.5"
+              stroke="currentColor"
+              stroke-width="1.3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
           </svg>
         </button>
       {/if}
     </div>
     <div class="header-tabs">
-      <TabBar
-        tabs={currentTabs}
-        activeTabId={currentActiveTabId}
-        onTabClick={(id) => activeTabId.set(id)}
-        onTabClose={closeTab}
-        onNewTab={createNewTab}
+      <CollapseToggle
+        collapsed={sidebarCollapsed}
+        onToggle={() => (sidebarCollapsed = !sidebarCollapsed)}
       />
+      <div class="tab-bar-wrapper">
+        <TabBar
+          tabs={currentTabs}
+          activeTabId={currentActiveTabId}
+          onTabClick={(id) => activeTabId.set(id)}
+          onTabClose={closeTab}
+          onNewTab={createNewTab}
+        />
+      </div>
     </div>
 
+    <!-- Drag handle (spans header + content rows) -->
+    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <div class="drag-handle" role="separator" aria-orientation="vertical" on:mousedown={startDrag}></div>
+
     <!-- Content row -->
-    <div class="sidebar-spacer"></div>
     <div class="sidebar">
       <div class="sidebar-files">
-        <FileList files={$workspaceFiles} {activeFilePath} {onFileClick} storageKey="collapsed-{$workspaceName ?? 'default'}" />
+        <FileList
+          files={$workspaceFiles}
+          {activeFilePath}
+          {onFileClick}
+          onRename={wsMode === "server" ? onRenameFile : null}
+          onDelete={wsMode === "server" ? onDeleteFile : null}
+          storageKey="collapsed-{$workspaceName ?? 'default'}"
+        />
       </div>
       <div class="workspace-footer">
-        <svg class="ws-footer-icon" width="13" height="13" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M1 3.5C1 2.67 1.67 2 2.5 2H5.5L7 3.5H11.5C12.33 3.5 13 4.17 13 5V10.5C13 11.33 12.33 12 11.5 12H2.5C1.67 12 1 11.33 1 10.5V3.5Z" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        <svg
+          class="ws-footer-icon"
+          width="13"
+          height="13"
+          viewBox="0 0 14 14"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M1 3.5C1 2.67 1.67 2 2.5 2H5.5L7 3.5H11.5C12.33 3.5 13 4.17 13 5V10.5C13 11.33 12.33 12 11.5 12H2.5C1.67 12 1 11.33 1 10.5V3.5Z"
+            stroke="currentColor"
+            stroke-width="1.2"
+            fill="none"
+          />
         </svg>
-        <span class="ws-footer-name" title={$workspaceName ?? "workspace1"}>{$workspaceName ?? "workspace1"}</span>
-        <button class="ws-footer-btn" on:click={() => goto("/")} title="Open workspace">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M6.5 2V11M2 6.5H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <span class="ws-footer-name" title={$workspaceName ?? "workspace1"}
+          >{$workspaceName ?? "workspace1"}</span
+        >
+        <button
+          class="ws-footer-btn"
+          on:click={() => goto("/")}
+          title="Open workspace"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 13 13"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M6.5 2V11M2 6.5H11"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
           </svg>
         </button>
       </div>
@@ -338,7 +581,8 @@
     <div class="editor-pane">
       {#if wsMode === "fallback"}
         <div class="fallback-banner">
-          Read-only mode — Ctrl+S downloads the file. For full write support run the app with <code>pnpm run web-app:dev</code>.
+          Read-only mode — Ctrl+S downloads the file. For full write support run
+          the app with <code>pnpm run web-app:dev</code>.
         </div>
       {/if}
       {#if errorMessage}
@@ -354,7 +598,9 @@
           onChange={syncContent}
         />
       {:else}
-        <div class="empty-editor"><p>Open a file from the list on the left.</p></div>
+        <div class="empty-editor">
+          <p>Open a file from the list on the left.</p>
+        </div>
       {/if}
     </div>
   </div>
@@ -374,7 +620,7 @@
     height: 100vh;
     display: grid;
     grid-template-rows: 36px 1fr;
-    grid-template-columns: 28px var(--sidebar-width) 1fr;
+    grid-template-columns: var(--sidebar-width) 4px 1fr;
     transition: grid-template-columns 0.18s ease;
     overflow: hidden;
 
@@ -389,111 +635,199 @@
     --accent: #5c9cf5;
   }
 
-  .header-toggle {
-    grid-row: 1; grid-column: 1;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--surface); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
-  }
-
   .header-files {
-    grid-row: 1; grid-column: 2;
-    display: flex; align-items: center; gap: 4px; padding: 0 8px;
-    background: var(--surface); border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+    grid-row: 1;
+    grid-column: 1;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
     overflow: hidden;
+    min-width: 0;
   }
-
-  .app-shell.collapsed .header-files { width: 0; padding: 0; }
 
   .workspace-name {
-    font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis; font-weight: 500; flex: 1; min-width: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+    flex: 1;
+    min-width: 0;
   }
 
   .reload-btn {
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; width: 20px; height: 20px;
-    background: none; border: none; cursor: pointer;
-    color: var(--text-muted); border-radius: 3px; padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    border-radius: 3px;
+    padding: 0;
   }
-  .reload-btn:hover { background: var(--hover); color: var(--text); }
+  .reload-btn:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
 
   .header-tabs {
-    grid-row: 1; grid-column: 3;
-    background: var(--surface); border-bottom: 1px solid var(--border); overflow: hidden;
+    grid-row: 1;
+    grid-column: 3;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    align-items: stretch;
   }
 
-  .sidebar-spacer {
-    grid-row: 2; grid-column: 1;
-    background: var(--surface); border-right: 1px solid var(--border);
+  .tab-bar-wrapper {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .drag-handle {
+    grid-row: 1 / 3;
+    grid-column: 2;
+    cursor: col-resize;
+    background: var(--border);
+    position: relative;
+    z-index: 10;
+    transition: background 0.15s;
+  }
+
+  .drag-handle::after {
+    content: "";
+    position: absolute;
+    inset: 0 -4px;
+    cursor: col-resize;
+  }
+
+  .drag-handle:hover {
+    background: var(--accent);
   }
 
   .sidebar {
-    grid-row: 2; grid-column: 2;
-    background: var(--surface); border-right: 1px solid var(--border);
-    overflow: hidden; min-width: 0;
-    display: flex; flex-direction: column;
+    grid-row: 2;
+    grid-column: 1;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .sidebar-files {
-    flex: 1; overflow: hidden; min-height: 0;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
   }
 
   .workspace-footer {
     flex-shrink: 0;
     border-top: 1px solid var(--border);
     padding: 6px 8px;
-    display: flex; align-items: center; gap: 5px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
   }
 
   .ws-footer-icon {
-    flex-shrink: 0; color: #c8a560;
+    flex-shrink: 0;
+    color: #c8a560;
   }
 
   .ws-footer-name {
-    flex: 1; min-width: 0;
-    font-size: 0.75rem; color: var(--text-muted);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .ws-footer-btn {
     flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    width: 20px; height: 20px;
-    background: none; border: none; cursor: pointer;
-    color: var(--text-muted); border-radius: 3px; padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    border-radius: 3px;
+    padding: 0;
   }
-  .ws-footer-btn:hover { background: var(--hover); color: var(--text); }
+  .ws-footer-btn:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
 
   .editor-pane {
-    grid-row: 2; grid-column: 3;
-    overflow: hidden; display: flex; flex-direction: column;
-    min-width: 0; background: var(--bg);
+    grid-row: 2;
+    grid-column: 3;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg);
     padding: 1rem;
   }
 
   .empty-editor {
-    display: flex; align-items: center; justify-content: center;
-    height: 100%; color: var(--text-muted); font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 0.9rem;
   }
 
   .fallback-banner {
-    background: #2a2a1a; color: #d4b96a;
-    padding: 5px 12px; font-size: 0.8rem; flex-shrink: 0;
+    background: #2a2a1a;
+    color: #d4b96a;
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    flex-shrink: 0;
     border-bottom: 1px solid #3a3a1a;
   }
 
   .fallback-banner code {
-    font-family: monospace; background: rgba(255,255,255,0.08);
-    padding: 0 4px; border-radius: 3px;
+    font-family: monospace;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0 4px;
+    border-radius: 3px;
   }
 
   .error-banner {
-    display: flex; align-items: center; justify-content: space-between;
-    background: #5a1a1a; color: #f87171;
-    padding: 6px 12px; font-size: 0.85rem; flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #5a1a1a;
+    color: #f87171;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    flex-shrink: 0;
   }
 
   .error-banner button {
-    background: none; border: none; color: inherit; cursor: pointer; font-size: 1rem; padding: 0 4px;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0 4px;
   }
 </style>

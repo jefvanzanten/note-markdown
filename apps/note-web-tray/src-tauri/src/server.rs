@@ -59,6 +59,14 @@ struct FileQuery {
 }
 
 #[derive(Deserialize)]
+struct RenameQuery {
+    workspace: Option<String>,
+    path: Option<String>,
+    #[serde(rename = "newPath")]
+    new_path: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct FilesQuery {
     workspace: Option<String>,
 }
@@ -253,6 +261,66 @@ async fn get_list_dirs(Query(query): Query<PathQuery>) -> impl IntoResponse {
     axum::Json(DirListing { current: current_str, parent, dirs }).into_response()
 }
 
+async fn delete_file(Query(query): Query<FileQuery>) -> impl IntoResponse {
+    let (Some(workspace), Some(file_path)) = (query.workspace, query.path) else {
+        return (StatusCode::BAD_REQUEST, "Missing workspace or path").into_response();
+    };
+    let workspace_canon = match std::fs::canonicalize(&workspace) {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+    };
+    let abs = match std::fs::canonicalize(workspace_canon.join(&file_path)) {
+        Ok(p) => p,
+        Err(_) => return (StatusCode::NOT_FOUND, "Not found").into_response(),
+    };
+    if !abs.starts_with(&workspace_canon) {
+        return (StatusCode::FORBIDDEN, "Access denied").into_response();
+    }
+    let result = if abs.is_dir() {
+        std::fs::remove_dir_all(&abs)
+    } else {
+        std::fs::remove_file(&abs)
+    };
+    match result {
+        Ok(_) => (StatusCode::OK, "OK").into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+async fn rename_file(Query(query): Query<RenameQuery>) -> impl IntoResponse {
+    let (Some(workspace), Some(old_path), Some(new_path)) = (query.workspace, query.path, query.new_path) else {
+        return (StatusCode::BAD_REQUEST, "Missing workspace, path, or newPath").into_response();
+    };
+    let workspace_canon = match std::fs::canonicalize(&workspace) {
+        Ok(p) => p,
+        Err(e) => return (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+    };
+    let old_abs = match std::fs::canonicalize(workspace_canon.join(&old_path)) {
+        Ok(p) => p,
+        Err(_) => return (StatusCode::NOT_FOUND, "Source not found").into_response(),
+    };
+    if !old_abs.starts_with(&workspace_canon) {
+        return (StatusCode::FORBIDDEN, "Access denied").into_response();
+    }
+    let new_abs = workspace_canon.join(&new_path);
+    if let Some(parent) = new_abs.parent() {
+        match std::fs::canonicalize(parent) {
+            Ok(cp) if !cp.starts_with(&workspace_canon) => {
+                return (StatusCode::FORBIDDEN, "Access denied").into_response();
+            }
+            Err(_) => return (StatusCode::BAD_REQUEST, "Target directory does not exist").into_response(),
+            _ => {}
+        }
+    }
+    if new_abs.exists() {
+        return (StatusCode::CONFLICT, "Target already exists").into_response();
+    }
+    match std::fs::rename(&old_abs, &new_abs) {
+        Ok(_) => (StatusCode::OK, "OK").into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
 async fn serve_static(uri: axum::http::Uri) -> Response<Body> {
     let path = uri.path().trim_start_matches('/');
     let path = if path.is_empty() { "index.html" } else { path };
@@ -286,7 +354,7 @@ pub async fn start(recents_path: PathBuf) {
         .route("/api/workspaces/recent", get(get_recents))
         .route("/api/workspaces", axum::routing::post(post_workspaces))
         .route("/api/files", get(get_files))
-        .route("/api/file", get(get_file).put(put_file))
+        .route("/api/file", get(get_file).put(put_file).delete(delete_file).patch(rename_file))
         .route("/api/list-dirs", get(get_list_dirs))
         .fallback(serve_static)
         .with_state(state);
